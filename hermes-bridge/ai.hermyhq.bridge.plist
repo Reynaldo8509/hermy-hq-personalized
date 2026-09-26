@@ -1,0 +1,40 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  launchd service for the Hermy HQ ↔ Hermes bridge.
+  Edit the CAPITALIZED placeholders, then:
+    cp ai.hermyhq.bridge.plist ~/Library/LaunchAgents/
+    launchctl load ~/Library/LaunchAgents/ai.hermyhq.bridge.plist
+  Logs: /tmp/hermes-bridge.out.log  /tmp/hermes-bridge.err.log
+-->
+<plist version="1.0">
+<dict>
+  <key>Label</key>
+  <string>ai.hermyhq.bridge</string>
+
+  <key>ProgramArguments</key>
+  <array>
+    <string>/usr/bin/env</string>
+    <string>node</string>
+    <string>/ABSOLUTE/PATH/TO/hermes-bridge/bridge.mjs</string>
+  </array>
+
+  <key>EnvironmentVariables</key>
+  <dict>
+    <key>DATABASE_URL</key>
+    <string>PASTE_YOUR_DATABASE_URL_HERE</string>
+    <key>HERMES_BOARD</key>
+    <string>default</string>
+    <key>PATH</key>
+    <string>/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin:/Users/YOU/.local/bin</string>
+  </dict>
+
+  <key>RunAtLoad</key>
+  <true/>
+  <key>KeepAlive</key>
+  <true/>
+  <key>StandardOutPath</key>
+  <string>/tmp/hermes-bridge.out.log</string>
+  <key>StandardErrorPath</key>
+  <string>/tmp/hermes-bridge.err.log</string>
+</dict>
+</plist>

@@ -1,0 +1,12 @@
+[Unit]
+Description=Hermes Gateway VPS Service
+After=network.target
+
+[Service]
+ExecStart=$HOME/hermes/hq/hermes-bridge/gateway/run.py
+Restart=always
+User=example-user
+WorkingDirectory=$HOME/hermes/hq/hermes-bridge/gateway
+
+[Install]
+WantedBy=multi-user.target
