@@ -4,6 +4,11 @@
 
 <sub>Banner original del Hermy HQ instalado en este proyecto.</sub>
 
+<img width="1916" height="845" alt="Hermy HQ Panel" src="https://github.com/user-attachments/assets/fa85e3e5-8d6d-466f-b5a4-daf2fce5b013" />
+<img width="1870" height="1406" alt="Hermy HQ Panel 2" src="https://github.com/user-attachments/assets/9ecf467f-9e65-402b-a25a-eca1f44c6b18" />
+
+
+
 Código activo de la aplicación Hermy HQ, el panel de coordinación y el puente Hermes del despliegue del VPS. El repo contiene fuentes, migraciones, manifiestos de dependencias y configuración de servicio de ejemplo. Excluye la base de datos en ejecución, entornos, registros, compilaciones, dependencias instaladas y respaldos internos.
 
 Este proyecto se integra con [Hermes Agent Personalized](https://github.com/Reynaldo8509/hermes-agent-personalized) y [Home Assistant Personalized](https://github.com/Reynaldo8509/home-assistant-personalized).
