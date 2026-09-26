@@ -1,0 +1,14 @@
+scanner/
+data/
+scripts/
+*.backup
+*.bak
+*.fix
+*.fix2
+*.fix3
+src/app/globals.css.backup
+src/app/page.tsx.backup
+src/components/sidebar.tsx.backup
+src/components/sidebar.tsx.bak
+prisma/migrations/
+.env*

@@ -1,0 +1,9 @@
+{
+  "regions": ["iad1"],
+  "crons": [
+    {
+      "path": "/api/cron/x-stats",
+      "schedule": "0 8 * * *"
+    }
+  ]
+}

@@ -1,0 +1,519 @@
+generator client {
+  provider      = "prisma-client-js"
+  binaryTargets = ["native", "linux-arm64-openssl-3.0.x"]
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model Account {
+  id                String  @id @default(cuid())
+  userId            String
+  type              String
+  provider          String
+  providerAccountId String
+  refresh_token     String?
+  access_token      String?
+  expires_at        Int?
+  token_type        String?
+  scope             String?
+  id_token          String?
+  session_state     String?
+  user              User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([provider, providerAccountId])
+}
+
+model Session {
+  id           String   @id @default(cuid())
+  sessionToken String   @unique
+  userId       String
+  expires      DateTime
+  user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+model User {
+  id            String    @id @default(cuid())
+  name          String?
+  email         String?   @unique
+  emailVerified DateTime?
+  image         String?
+  accounts      Account[]
+  sessions      Session[]
+}
+
+model VerificationToken {
+  identifier String
+  token      String   @unique
+  expires    DateTime
+
+  @@unique([identifier, token])
+}
+
+model Draft {
+  id              String    @id @default(uuid())
+  text            String
+  title           String?
+  model           String?
+  status          String    @default("pending")
+  type            String?
+  category        String?
+  hookType        String?
+  feedbackRating  String?
+  feedbackReason  String?
+  viralScore      Json?
+  impressionScore Json?
+  scheduledDate   String?
+  scheduledTime   String?
+  visualUrl       String?
+  variantGroup    String?
+  postedAt        DateTime?
+  postedUrl       String?
+  tweetUrl        String?
+  tweetId         String?
+  metrics         Json?
+  editHistory     Json?     @default("[]")
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+  quoteUrl        String?
+  quoteText       String?
+
+  // Content intelligence fields
+  source          String?   // "sage" | "organic" | "csv_import"
+  engagementScore Float?    // time-weighted composite score (updated by scoring engine)
+  engagementTier  String?   // "top20" | "bottom20" | null (cleared/set on rescore)
+
+  @@index([status])
+  @@index([createdAt])
+  @@index([tweetId])
+  @@index([source])
+  @@index([engagementTier])
+}
+
+model TweetMetric {
+  id          String    @id @default(cuid())
+  draftId     String
+  tweetId     String?
+  url         String?
+  postedAt    DateTime?
+  checkpoints Json?
+  createdAt   DateTime  @default(now())
+
+  @@index([draftId])
+}
+
+model Idea {
+  id          String   @id @default(uuid())
+  title       String
+  description String?
+  category    String?
+  type        String?
+  model       String?
+  status      String?
+  timestamp   DateTime @default(now())
+
+  @@index([category])
+  @@index([type])
+}
+
+model ContentCalendar {
+  id   String @id @default(cuid())
+  week String @unique
+  data Json
+}
+
+model YoutubeIdea {
+  id                String   @id @default(cuid())
+  title             String
+  hook              String?
+  angle             String?
+  hookType          String?
+  funnelStage       String?
+  status            String   @default("pending")
+  rejectedReason    String?
+  sourceUrl         String?
+  sourceSummary     String?
+  competitionScore  String?  // "gap" | "moderate" | "crowded"
+  competitionData   Json?    // { resultCount, avgViews, topVideos[], scoredAt }
+  createdAt         DateTime @default(now())
+
+  @@index([status])
+}
+
+model YoutubeScript {
+  id              String   @id @default(cuid())
+  title           String
+  hook            String?
+  storySetup      String?
+  conflict        String?
+  insight         String?
+  cta             String?
+  caption         String?
+  onScreenText    String?
+  hookType        String?
+  funnelStage     String?
+  factCheck       Json?
+  fullScript      String?
+  status          String   @default("draft")
+  rejectedReason  String?
+  // SEO Package
+  seoTitle        String?
+  seoDescription  String?
+  seoTags         Json?
+  seoChapters     Json?
+  titleVariants   Json?
+  thumbnailConcept String?
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  @@index([status])
+}
+
+model YoutubeFeedback {
+  id     String   @id @default(cuid())
+  title  String
+  reason String?
+  type   String?
+  date   DateTime @default(now())
+}
+
+model LongformScript {
+  id               String   @id @default(cuid())
+  title            String
+  type             String?
+  status           String   @default("draft")
+  platform         String?
+  platforms        Json?
+  description      String?
+  hook             String?
+  outline          String?
+  fullScript       String?
+  targetLength     String?
+  factCheck        Json?
+  notes            String?
+  rejectedReason   String?
+  youtubeUrl       String?
+  thumbnailUrl     String?
+  tweetUrl         String?
+  youtubeViews     Int?
+  youtubeLikes     Int?
+  youtubeComments  Int?
+  tweetViews       Int?
+  tweetLikes       Int?
+  tweetBookmarks   Int?
+  tweetRetweets    Int?
+  tweetReplies     Int?
+  postedAt         DateTime?
+  competitionScore String?  // "gap" | "moderate" | "crowded"
+  competitionData  Json?    // { resultCount, avgViews, topVideos[], scoredAt }
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+
+  @@index([status])
+}
+
+model AgentState {
+  id             String    @id
+  name           String
+  emoji          String?
+  role           String?
+  status         String    @default("offline")
+  lastActive     DateTime?
+  tasksCompleted Int       @default(0)
+  totalCost      Float     @default(0)
+  currentTask    String?
+  recentActivity Json?     @default("[]")
+  updatedAt      DateTime  @updatedAt
+}
+
+model AgentBusMessage {
+  id        String   @id @default(uuid())
+  fromAgent String
+  toAgent   String
+  type      String
+  content   String
+  metadata  Json?
+  read      Boolean  @default(false)
+  timestamp DateTime @default(now())
+
+  @@index([toAgent, read])
+  @@index([fromAgent])
+}
+
+model BattleRoyaleBot {
+  id        String   @id
+  state     Json
+  updatedAt DateTime @updatedAt
+}
+
+model ContentRequest {
+  id             String    @id @default(uuid())
+  prompt         String
+  status         String    @default("pending")
+  resultDraftIds Json?
+  createdAt      DateTime  @default(now())
+  completedAt    DateTime?
+}
+
+// ─── Generic Key-Value Store ────────────────────────────────────
+
+model DataStore {
+  key       String   @id
+  data      Json
+  updatedAt DateTime @updatedAt
+}
+
+// ─── Daily Briefs ───────────────────────────────────────────────
+
+model Brief {
+  id        String   @id @default(cuid())
+  date      String   @unique
+  content   String   @db.Text
+  source    String   @default("brief")
+  createdAt DateTime @default(now())
+}
+
+// ─── Missions ───────────────────────────────────────────────────
+
+model Mission {
+  id          String   @id @default(uuid())
+  agentId     String
+  title       String
+  description String   @db.Text
+  status      String   @default("pending") // pending, active, completed, failed
+  priority    String   @default("medium") // high, medium, low
+  result      String?  @db.Text
+  createdAt   DateTime @default(now())
+  completedAt DateTime?
+
+  @@index([agentId])
+  @@index([status])
+}
+
+// ─── Articles ───────────────────────────────────────────────────
+
+model Article {
+  id              String    @id @default(uuid())
+  title           String
+  body            String    @db.Text
+  track           String    // "mega-viral" | "local-viral" | "icp-viral"
+  status          String    @default("idea") // "idea" | "draft" | "ready" | "posted"
+  qtTweet         String?   @db.Text
+  qtUrl           String?
+  heroImageUrl    String?
+  heroImageHtml   String?   @db.Text
+  inspirationUrls String?   @db.Text // JSON array of URLs
+  themes          String?   // JSON array of themes
+  scheduledDate   String?
+  postedAt        DateTime?
+  postedUrl       String?
+  impressions     Int?
+  likes           Int?
+  bookmarks       Int?
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+
+  @@index([status])
+  @@index([track])
+  @@index([scheduledDate])
+}
+
+model SavedTitle {
+  id        String   @id @default(cuid())
+  title     String
+  track     String
+  themes    String?  // JSON array
+  createdAt DateTime @default(now())
+
+  @@index([track])
+}
+
+// ─── Client Pulse Telegram Bot ─────────────────────────────────
+
+model ClientPulseClient {
+  id                   String                @id @default(cuid())
+  notionPageId         String?               @unique
+  clientName           String
+  status               String?
+  services             Json                  @default("[]")
+  productManagerName   String?
+  renewalDate          DateTime?
+  endDate              DateTime?
+  expectedCheckinHours Int                   @default(72)
+  sourceUpdatedAt      DateTime?
+  createdAt            DateTime              @default(now())
+  updatedAt            DateTime              @updatedAt
+  chats                ClientPulseChat[]
+  analyses             ClientPulseAnalysis[]
+  alerts               ClientPulseAlert[]
+
+  @@index([status])
+  @@index([clientName])
+  @@index([productManagerName])
+}
+
+model ClientPulseChat {
+  id              String               @id @default(cuid())
+  telegramChatId  String               @unique
+  title           String
+  linkedClientId  String?
+  status          String               @default("active")
+  internalUserIds Json                 @default("[]")
+  lastSeenAt      DateTime?
+  createdAt       DateTime             @default(now())
+  updatedAt       DateTime             @updatedAt
+  linkedClient    ClientPulseClient?   @relation(fields: [linkedClientId], references: [id], onDelete: SetNull)
+  messages        ClientPulseMessage[]
+  alerts          ClientPulseAlert[]
+
+  @@index([linkedClientId])
+  @@index([status])
+}
+
+model ClientPulseMessage {
+  id                String           @id @default(cuid())
+  telegramMessageId String
+  telegramChatId    String
+  chatId            String?
+  senderTelegramId  String
+  senderName        String
+  isInternal        Boolean          @default(false)
+  isBot             Boolean          @default(false)
+  text              String           @db.Text
+  sentAt            DateTime
+  intent            String           @default("other")
+  sentiment         String           @default("neutral")
+  needsReply        Boolean          @default(false)
+  rawJson           Json?
+  createdAt         DateTime         @default(now())
+  chat              ClientPulseChat? @relation(fields: [chatId], references: [id], onDelete: SetNull)
+
+  @@unique([telegramChatId, telegramMessageId])
+  @@index([telegramChatId, sentAt])
+  @@index([chatId, sentAt])
+  @@index([needsReply])
+}
+
+model ClientPulseAnalysis {
+  id                  String            @id @default(cuid())
+  clientId            String
+  windowStart         DateTime
+  windowEnd           DateTime
+  sentimentScore      Int
+  responseScore       Int
+  cadenceScore        Int
+  renewalRiskScore    Int
+  positiveSignalScore Int               @default(70)
+  overallScore        Int
+  category            String
+  reasons             Json              @default("[]")
+  evidence            Json              @default("[]")
+  recommendedAction   String?           @db.Text
+  llmSummary          String?           @db.Text
+  analysisSource      String            @default("fallback")
+  analyzedAt          DateTime          @default(now())
+  client              ClientPulseClient @relation(fields: [clientId], references: [id], onDelete: Cascade)
+
+  @@index([clientId, analyzedAt])
+  @@index([category])
+  @@index([overallScore])
+}
+
+model ClientPulseAlert {
+  id                String             @id @default(cuid())
+  clientId          String?
+  chatId            String?
+  type              String
+  severity          String
+  evidence          Json               @default("[]")
+  reason            String             @db.Text
+  recommendedAction String?            @db.Text
+  sentTo            String?
+  sentAt            DateTime?
+  acknowledgedAt    DateTime?
+  createdAt         DateTime           @default(now())
+  client            ClientPulseClient? @relation(fields: [clientId], references: [id], onDelete: SetNull)
+  chat              ClientPulseChat?   @relation(fields: [chatId], references: [id], onDelete: SetNull)
+
+  @@index([clientId, createdAt])
+  @@index([severity])
+  @@index([sentAt])
+  @@index([acknowledgedAt])
+}
+
+// ─── Hermes bus (Hermy HQ website ↔ Hermes on the Mac mini) ─────
+// Shared Postgres is the message bus. A bridge on the mini polls
+// AgentRequest, runs approved/safe ones via the `hermes` CLI, and
+// mirrors kanban tasks + activity back into HermesTask / AgentEvent.
+
+model AgentRequest {
+  id            String    @id @default(cuid())
+  origin        String    @default("web")     // "web" | "hermes"
+  kind          String    @default("oneshot") // "oneshot" | "kanban" | "chat"
+  title         String
+  prompt        String?
+  sideEffecting Boolean   @default(false)
+  status        String    @default("queued")  // queued | awaiting_approval | approved | running | done | failed | rejected
+  result        String?
+  error         String?
+  hermesTaskId  String?
+  decidedAt     DateTime?
+  startedAt     DateTime?
+  finishedAt    DateTime?
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  @@index([status])
+  @@index([createdAt])
+}
+
+model AgentEvent {
+  id        String   @id @default(cuid())
+  kind      String   @default("activity") // activity | run | status | memory
+  title     String
+  detail    String?
+  agent     String?
+  level     String   @default("info")     // info | up | warn | down
+  meta      Json?
+  createdAt DateTime @default(now())
+
+  @@index([createdAt])
+}
+
+model HermesTask {
+  id        String   @id                   // Hermes task id
+  board     String   @default("default")
+  title     String
+  assignee  String?
+  status    String   @default("todo")
+  priority  Int?
+  result    String?
+  updatedAt DateTime @default(now())
+  syncedAt  DateTime @updatedAt
+
+  @@index([board])
+  @@index([status])
+}
+
+// ─── Hermes Memory Wiki (warm tier — git-tracked markdown, mirrored) ─────
+model HermesMemory {
+  id         String    @id            // wiki entry slug (relative path w/o .md)
+  path       String                   // file path relative to wiki root
+  type       String    @default("fact")
+  title      String
+  status     String    @default("active")
+  confidence String?
+  provenance String?
+  tags       String[]
+  links      String[]
+  body       String    @default("")
+  validFrom  DateTime?
+  validTo    DateTime?
+  updatedAt  DateTime  @default(now())
+  syncedAt   DateTime  @updatedAt
+
+  @@index([type])
+  @@index([status])
+}
