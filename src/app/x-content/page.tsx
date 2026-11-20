@@ -1,5 +1,6 @@
 "use client";
 
+import { formatEcuadorTimestamp } from "@/lib/ecuador-time";
 import { useEffect, useState, useCallback, useRef, memo } from "react";
 import { EmptyState } from "@/components/ui/kit";
 
@@ -56,7 +57,7 @@ function TrendRadarSection() {
     try {
       await fetch("/api/trends/snipe", {
         method: "POST",
-        headers: { "Content-Type": "application/json", "x-internal-secret": "296cfa48ad6963eb21ac9deb4981ad0c982cff51631bda9cf43fd0fa7217088b" },
+        headers: { "Content-Type": "application/json"},
         body: JSON.stringify({ trendId: trend.id, topic: trend.topic, sageAngle: trend.sageAngle, url: trend.url }),
       });
     } finally { setTimeout(() => setSnipedId(null), 2000); }
@@ -145,7 +146,7 @@ function TrendRadarSection() {
   );
 }
 
-export async function fetchDrafts() {
+async function fetchDrafts() {
   const res = await fetch("/api/x-content", { cache: "no-store" });
   if (!res.ok) throw new Error(`${res.status}`);
   return await res.json();
@@ -389,7 +390,7 @@ const DraftCard = memo(function DraftCard({
 
         {/* Meta */}
         <div className="flex items-center justify-between num text-[11px] text-[var(--text-4)]">
-          <span>{draft.model} · {new Date(draft.createdAt).toLocaleDateString()} {new Date(draft.createdAt).toLocaleTimeString([], {hour: '2-digit', minute: '2-digit'})}</span>
+          <span>{draft.model} · {formatEcuadorTimestamp(draft.createdAt)}</span>
           {draft.postedUrl && <a href={draft.postedUrl} target="_blank" rel="noreferrer" className="text-[var(--accent)] hover:brightness-110">View on X ↗</a>}
         </div>
       </div>

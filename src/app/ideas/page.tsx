@@ -1,5 +1,6 @@
 "use client";
 
+import { formatEcuadorTimestamp, getEcuadorCalendarDate } from "@/lib/ecuador-time";
 import { useEffect, useState, useCallback } from "react";
 import { Plus, Clock, Lightbulb, Check, X } from "lucide-react";
 import { Panel, Pill, Button, Skeleton, EmptyState, rise } from "@/components/ui/kit";
@@ -42,14 +43,16 @@ const inputCls =
 function formatDate(dateStr?: string) {
   if (!dateStr) return "";
   try {
-    const d = new Date(dateStr);
-    const now = new Date();
-    const diff = now.getTime() - d.getTime();
-    const days = Math.floor(diff / 86400000);
+    const dateKey = getEcuadorCalendarDate(dateStr);
+    const todayKey = getEcuadorCalendarDate(new Date());
+    if (!dateKey || !todayKey) return formatEcuadorTimestamp(dateStr, { dateOnly: true });
+    const dateValue = Date.parse(`${dateKey}T00:00:00.000Z`);
+    const todayValue = Date.parse(`${todayKey}T00:00:00.000Z`);
+    const days = Math.floor((todayValue - dateValue) / 86400000);
     if (days === 0) return "Today";
     if (days === 1) return "Yesterday";
-    if (days < 7) return `${days}d ago`;
-    return d.toLocaleDateString("en-US", { month: "short", day: "numeric" });
+    if (days > 1 && days < 7) return `${days}d ago`;
+    return formatEcuadorTimestamp(dateStr, { dateOnly: true });
   } catch { return ""; }
 }
 

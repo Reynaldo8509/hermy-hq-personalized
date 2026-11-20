@@ -1,5 +1,6 @@
 "use client";
 
+import { formatEcuadorTimestamp } from "@/lib/ecuador-time";
 import { useEffect, useState, useCallback, Suspense } from "react";
 import { useSearchParams, useRouter } from "next/navigation";
 import { rise, Skeleton } from "@/components/ui/kit";
@@ -854,7 +855,7 @@ function ComposeTab({
                       <p className="text-[13px] text-[var(--text)] pr-8 leading-snug">{saved.title}</p>
                       <div className="flex items-center gap-2 mt-2">
                         <span className="text-[10px] num text-[var(--text-3)]">
-                          {new Date(saved.createdAt).toLocaleDateString()}
+                          {formatEcuadorTimestamp(saved.createdAt, { dateOnly: true })}
                         </span>
                         <span className="text-[11px] text-[var(--accent)] opacity-0 group-hover:opacity-100 transition">
                           Use this →
@@ -1569,7 +1570,7 @@ function ArticleCard({ article, onClick }: { article: Article; onClick: () => vo
       <div className="flex items-center gap-2 text-xs text-[var(--text-3)]">
         <span><span className="num">{wordCount}</span> words</span>
         <span>·</span>
-        <span>{new Date(article.createdAt).toLocaleDateString()}</span>
+        <span>{formatEcuadorTimestamp(article.createdAt, { dateOnly: true })}</span>
       </div>
       {article.qtTweet && (
         <p className="text-xs text-[var(--text-4)] mt-2 line-clamp-2 italic">
@@ -2059,9 +2060,9 @@ function ArticleEditor({
             )}
 
             <div className="text-xs text-[var(--text-4)]">
-              Created: {new Date(article.createdAt).toLocaleString()}
+              Created: {formatEcuadorTimestamp(article.createdAt)}
               <br />
-              Updated: {new Date(article.updatedAt).toLocaleString()}
+              Updated: {formatEcuadorTimestamp(article.updatedAt)}
             </div>
           </div>
         </div>

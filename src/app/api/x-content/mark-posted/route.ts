@@ -33,7 +33,7 @@ export async function POST(req: NextRequest) {
         });
 
         const result = execSync(
-          `curl -s -X POST "https://api.x.ai/v1/responses" -H "Authorization: Bearer ${apiKey}" -H "Content-Type: application/json" -d '${payload.replace(/'/g, "'\\''")}'`,
+          `curl -s -X POST "https://api.x.ai/v1/responses" -H "Authorization: Bearer ${apiKey}" -H "Content-Type: application/json" -d '${payload.replace(/'/g, "'\''")}'`,
           { timeout: 30000, encoding: "utf-8" }
         );
 

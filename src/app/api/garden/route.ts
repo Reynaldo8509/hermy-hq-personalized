@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import type { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
+import { requireHumanActor } from "@/lib/human-auth";
 
 const GARDEN_KEY = "hermy-hq-garden";
 
@@ -19,11 +20,15 @@ function validGarden(value: unknown): value is { version?: unknown; plants: unkn
 // Garden data is stored locally in Hermy HQ's Postgres database. The former
 // JSONBlob source now returns 403 and made this page unavailable.
 export async function GET() {
+  const auth = await requireHumanActor();
+  if (auth.response) return auth.response;
   const row = await prisma.dataStore.findUnique({ where: { key: GARDEN_KEY } });
   return NextResponse.json(row?.data ?? emptyGarden());
 }
 
 export async function PUT(req: NextRequest) {
+  const auth = await requireHumanActor();
+  if (auth.response) return auth.response;
   const body: unknown = await req.json().catch(() => null);
   if (!validGarden(body)) {
     return NextResponse.json({ error: "garden.plants must be an array" }, { status: 400 });

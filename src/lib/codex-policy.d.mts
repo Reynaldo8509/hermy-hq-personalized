@@ -1,0 +1,24 @@
+export type CodexPriority = "important" | "critical";
+export type CodexMinimumPriority = CodexPriority | "paused";
+export type CodexPolicy = {
+  minimumPriority: CodexMinimumPriority;
+  requireApprovalForSideEffects: true;
+  localTimeQuotaEnabled: false;
+  maxRunsPerFiveHours: 1;
+  maxRunsPerSevenDays: 3;
+};
+export type CodexAssignment = { priority: CodexPriority; target: string; expectedOutcome: string; rationale: string; taskClass: string; codexRequiredReason: string; lowerRouteFailed: boolean; exclusiveCapability: boolean; requestedBy: "owner" | "agent"; requestedExecutor: string; requiredCapability: string; parentRequestId: string; normalizedIntent: string };
+export const CODEX_LOCAL_TIME_QUOTA_ENABLED: false;
+export function codexAdmission(value: Record<string, unknown>): { admitted: boolean; reason: string; priority: string | null; task_class: string | null; explicit_owner_request: boolean; requested_executor: string | null; required_capability: string; codex_required_reason: string | null; fallback_class: string };
+export function codexParentRequestId(task: { prompt?: string | null; parentRequestId?: string | null } | null | undefined): string | null;
+export function codexParentAttemptAllowed(task: { origin?: string; id?: string; prompt?: string | null; parentRequestId?: string | null; createdAt?: string | number | Date } | null | undefined, siblings?: readonly { origin?: string; id?: string; prompt?: string | null; parentRequestId?: string | null; createdAt?: string | number | Date }[]): boolean;
+export function codexTaskFingerprint(task: unknown): string;
+export const CODEX_POLICY_STORE_KEY: string;
+export const CODEX_POLICY_LIMITS: Readonly<{ maxRunsPerFiveHours: 1; maxRunsPerSevenDays: 3 }>;
+export const DEFAULT_CODEX_POLICY: Readonly<CodexPolicy>;
+export function normalizeCodexPolicy(value: unknown): CodexPolicy;
+export function isCodexPriorityAllowed(priority: unknown, policyValue: unknown): boolean;
+export function normalizeCodexAssignment(value: unknown): CodexAssignment | null;
+export function codexAssignmentFromPrompt(prompt: unknown): CodexAssignment | null;
+export type CodexTaskContract = { origin: string; kind: string; status: string; sideEffecting: boolean; action: string | null; capability: string | null; prompt: string | null };
+export function codexAssignmentAllowed(prompt: unknown, policyValue: unknown, status: unknown, task?: CodexTaskContract | null): boolean;
