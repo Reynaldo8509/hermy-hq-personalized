@@ -25,17 +25,30 @@ La ilustración resume visualmente el ecosistema. El diagrama Mermaid y las secc
 - Control de parada de un agente y control de emergencia para cancelar trabajo activo global.
 - Flujo de solicitudes y aprobaciones con estados pendientes, aprobadas, rechazadas y vencidas.
 - Puente Hermes que coloca solicitudes, asigna especialistas, evita encolar seguimiento para agentes pausados y conserva historial de solicitudes.
-- Vistas de actividad, historial, tareas, costes, salud y aprobaciones.
+- Agent Bus y cola persistente para solicitudes, asignación y seguimiento entre el dashboard, Bridge y workers.
+- Action Center para revisión de aprobaciones; scheduler y routing sujetos a políticas, permisos y disponibilidad.
+- Observabilidad con vistas de actividad, historial, tareas, costes, salud, memoria y aprobaciones; las métricas reales no se reconciliaron en la auditoría.
 
 ## Agentes configurados
 
-MAX coordina; ATLAS investiga; CODEX desarrolla; AEGIS realiza tareas de seguridad; MILO y PULSE cubren funciones auxiliares configuradas; LEDGER operaciones/continuidad; DOMUS hogar. El catálogo activo y las capacidades específicas están definidos en el código y pueden cambiar con la configuración.
+| Agente | Función configurada |
+|---|---|
+| **MAX** | Orquestación, clasificación y coordinación |
+| **ATLAS** | Investigación y validación de evidencia |
+| **CODEX** | Ingeniería y ejecución delegada desde HQ; no es el Codex CLI de la Dell |
+| **AEGIS** | Ciberseguridad con acciones deterministas y alcance de lectura |
+| **LEDGER** | Respaldos y continuidad operativa |
+| **MILO** | Correo y clasificación; su timer estaba inactivo en el corte auditado |
+| **DOMUS** | Integración con Home Assistant y domótica |
+| **PULSE** | Redes sociales y YouTube; ruta/modelo parcial en el corte auditado |
+
+El catálogo y las capacidades están sujetos a la configuración y a los permisos. La presencia de un agente no demuestra ejecución E2E.
 
 ## Auditoría y alcance funcional (20 de noviembre de 2026)
 
 En la inspección se encontraron ocho agentes configurados: **MAX, ATLAS, CODEX, AEGIS, LEDGER, MILO, DOMUS y PULSE**. La presencia de cada agente en el catálogo **no equivale a ejecución E2E demostrada**. MAX coordina; los especialistas ejecutan funciones diferenciadas sujetas a políticas, routing, disponibilidad y autorizaciones.
 
-El Bridge y el proceso HQ se observaron activos. La suite offline ampliada del snapshot público pasó 285 pruebas; una prueba que requiere un unit file privado fue omitida. El health autenticado de la API HQ y la ejecución E2E individual de los agentes no se certificaron. `AUTOAPPROVAL_ENABLED=false` desactiva la aprobación delegada general; existe además una ruta separada de operador firmado Ed25519 con capacidades acotadas, cuyo ciclo E2E no se validó. La ruta MAX de notificación automática está bloqueada hasta disponer de un handler Bridge dedicado.
+El Bridge y el proceso HQ se observaron activos. La validación final registrada para el snapshot público tuvo **293 pruebas aprobadas, 0 fallidas y 1 omitida**; la omitida requiere un unit file privado. El health autenticado de la API HQ y la ejecución E2E individual de los agentes no se certificaron. `AUTOAPPROVAL_ENABLED=false` desactiva la aprobación delegada general; existe además una ruta separada de operador firmado Ed25519 con capacidades acotadas, cuyo ciclo E2E no se validó. La ruta MAX de notificación automática está bloqueada hasta disponer de un handler Bridge dedicado.
 
 - **[Inventario de los ocho agentes y estado de HQ](docs/AGENTS-STATUS-2026-11-20.md)**: roles, componentes, arquitectura y evidencias.
 - **[Inventario técnico de Hermes personalizado](https://github.com/Reynaldo8509/hermes-agent-personalized/blob/main/docs/CAPABILITIES-2026-11-20.md)**.
