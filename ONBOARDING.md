@@ -67,7 +67,12 @@ never invent one:
 - `GOOGLE_CLIENT_ID` and `GOOGLE_CLIENT_SECRET` — ask the operator to paste from
   their Google OAuth app
 - `ALLOWED_EMAILS` — the Google email(s) allowed to sign in
-- `NEXT_PUBLIC_OWNER_NAME` and `NEXT_PUBLIC_BASE_URL`
+- `NEXT_PUBLIC_OWNER_NAME`, `NEXT_PUBLIC_BASE_URL`, and `HERMY_HQ_ALLOWED_HOST`
+  (the last value must be the hostname of the configured HTTPS HQ URL; do not
+  commit deployment hostnames to public source).
+- `HERMY_TRUSTED_OPERATOR_ID` must match the operator identity key in the
+  root-owned trusted operator registry. Keep the identifier and key registry
+  deployment-specific; never place private identity values in this repository.
 
 Then set the **Hermes / bridge** group: `HERMES_BOARD`, `HERMES_BIN`, `HERMES_WIKI`,
 `BRIEF_HOUR`, and generate `INTERNAL_API_SECRET` and `CRON_SECRET`

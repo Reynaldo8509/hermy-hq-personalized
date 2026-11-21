@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
+import { requestActor } from "@/lib/human-auth";
 
 export const dynamic = "force-dynamic";
 
@@ -57,6 +58,8 @@ Write ONE tweet about the trending topic. It must:
 `;
 
 export async function POST(req: Request) {
+  const auth = await requestActor(req, "internal:trend-snipe");
+  if (auth.response) return auth.response;
   try {
     const { trendId, topic, summary } = await req.json() as { trendId: string; topic: string; summary: string };
 

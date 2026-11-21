@@ -2,7 +2,8 @@
 import fs from "node:fs";
 import pg from "pg";
 
-const envText = fs.readFileSync(new URL("../.env", import.meta.url), "utf8");
+const envPath = new URL("../.env", import.meta.url);
+const envText = fs.existsSync(envPath) ? fs.readFileSync(envPath, "utf8") : "";
 const databaseUrl = process.env.DATABASE_URL || envText.match(/^DATABASE_URL=(.*)$/m)?.[1]?.trim();
 if (!databaseUrl) throw new Error("DATABASE_URL is required");
 const pool = new pg.Pool({ connectionString: databaseUrl, ssl: /@(localhost|127\.0\.0\.1)(?::\d+)?(?:[/?]|$)/.test(databaseUrl) ? undefined : { rejectUnauthorized: false } });
@@ -12,7 +13,7 @@ try {
   await client.query("BEGIN");
   await client.query(`INSERT INTO "AgentRequest" (id,kind,title,prompt,status,"sideEffecting",origin,"createdAt","updatedAt") VALUES ($1,'codex.change','Contract test','Non destructive contract test','awaiting_approval',true,'test',now(),now())`, [id]);
   const auditId = `${id}-audit`;
-  await client.query(`INSERT INTO "AgentRequest" (id,kind,title,prompt,status,"sideEffecting",origin,"createdAt","updatedAt") VALUES ($1,'codex.audit','Audit contract test','Read-only contract test','queued',false,'test',now(),now())`, [auditId]);
+  await client.query(`INSERT INTO "AgentRequest" (id,kind,title,prompt,status,"sideEffecting",origin,action,capability,"createdAt","updatedAt") VALUES ($1,'codex.audit','Audit contract test','Read-only contract test','queued',false,'web','audit','read_only',now(),now())`, [auditId]);
   const auditApproval = await client.query(`SELECT 1 FROM "ActionApproval" WHERE request_id=$1`, [auditId]);
   if (auditApproval.rowCount !== 0) throw new Error("read-only Codex audit unexpectedly requires approval");
   const memory = await client.query(`SELECT cause,hypothesis,remediation,validation FROM "IncidentMemory" WHERE request_id=$1`, [id]);

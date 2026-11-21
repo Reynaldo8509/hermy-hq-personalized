@@ -1,5 +1,6 @@
 "use client";
 
+import { formatEcuadorTimestamp } from "@/lib/ecuador-time";
 import { useEffect, useMemo, useState } from "react";
 import { Panel, SectionHeader, Eyebrow, Skeleton, EmptyState, Pill } from "@/components/ui/kit";
 
@@ -58,7 +59,7 @@ function scoreColor(score: number) {
 
 function dateLabel(value?: string) {
   if (!value) return "—";
-  return new Date(value).toLocaleDateString("en-GB", { timeZone: "Europe/Amsterdam" });
+  return formatEcuadorTimestamp(value, { dateOnly: true });
 }
 
 export default function ClientPulsePage() {

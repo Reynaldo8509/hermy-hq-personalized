@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
+import { internalSecretMatches } from "@/lib/internal-secret-auth.mjs";
 
 export const dynamic = "force-dynamic";
 
@@ -12,7 +13,7 @@ type MiloState = {
 
 function internal(request: NextRequest) {
   const secret = request.headers.get("x-internal-secret");
-  return Boolean(secret && secret === process.env.INTERNAL_API_SECRET);
+  return internalSecretMatches(secret, process.env.INTERNAL_API_SECRET);
 }
 
 export async function POST(request: NextRequest) {

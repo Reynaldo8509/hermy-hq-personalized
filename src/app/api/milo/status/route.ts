@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 
 export const dynamic = "force-dynamic";
+const MILO_EMAIL = String(process.env.MILO_ALLOWED_EMAIL || "").trim().toLowerCase();
 
 type Credentials = { email?: string; refreshToken?: string; connectedAt?: string };
 type MiloState = { lastCheckedAt?: string; initialized?: boolean; processedIds?: string[]; lastAlertCount?: number };
@@ -14,8 +15,8 @@ export async function GET() {
   const auth = (credentials?.data || {}) as Credentials;
   const runtime = (state?.data || {}) as MiloState;
   return NextResponse.json({
-    email: "[REDACTED]",
-    connected: Boolean(auth.refreshToken && auth.email === "[REDACTED]"),
+    account: "configured mailbox",
+    connected: Boolean(MILO_EMAIL && auth.refreshToken && auth.email?.toLowerCase() === MILO_EMAIL),
     connectedAt: auth.connectedAt || null,
     lastCheckedAt: runtime.lastCheckedAt || null,
     initialized: Boolean(runtime.initialized),

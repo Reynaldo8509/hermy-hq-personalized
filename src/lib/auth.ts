@@ -2,7 +2,7 @@ import type { NextAuthOptions } from 'next-auth'
 import GoogleProvider from 'next-auth/providers/google'
 import { prisma } from '@/lib/prisma'
 
-const MILO_EMAIL = '[REDACTED]'
+const MILO_EMAIL = String(process.env.MILO_ALLOWED_EMAIL || '').trim().toLowerCase()
 const GMAIL_READONLY_SCOPE = 'https://www.googleapis.com/auth/gmail.readonly'
 
 // Pure JWT auth — no DB adapter required.
@@ -36,7 +36,7 @@ export const authOptions: NextAuthOptions = {
       // refresh token for the single authorized mailbox.
       if (
         account?.refresh_token &&
-        user?.email?.toLowerCase() === MILO_EMAIL &&
+        MILO_EMAIL && user?.email?.toLowerCase() === MILO_EMAIL &&
         (account.scope || '').includes(GMAIL_READONLY_SCOPE)
       ) {
         try {

@@ -51,7 +51,13 @@ async function request(path, options = {}) {
     ...options,
   });
   const body = await response.json().catch(() => ({}));
-  if (!response.ok) throw new Error(`${response.status} ${JSON.stringify(body)}`);
+  if (!response.ok) {
+    const error = new Error(`${response.status} ${JSON.stringify(body)}`);
+    error.status = response.status;
+    error.code = typeof body.code === "string" ? body.code : null;
+    error.reason = typeof body.reason === "string" ? body.reason : null;
+    throw error;
+  }
   return body;
 }
 
@@ -164,11 +170,27 @@ function runCodex(prompt, outputFile, taskId, processor, taskKind) {
 }
 
 async function execute(task, processor) {
-  const claimed = await request(`/api/codex/tasks/${task.id}`, {
-    method: "PATCH",
-    body: JSON.stringify({ action: "claim", processor }),
-  });
+  let claimed;
+  try {
+    claimed = await request(`/api/codex/tasks/${task.id}`, {
+      method: "PATCH",
+      body: JSON.stringify({ action: "claim", processor }),
+    });
+  } catch (error) {
+    if (error?.status === 409 && error?.code === "CODEX_POLICY_BLOCKED") {
+      await request(`/api/codex/tasks/${task.id}`, {
+        method: "PATCH",
+        body: JSON.stringify({ action: "reject-policy", reason: error.reason || "assignment_policy_invalid" }),
+      });
+      return;
+    }
+    throw error;
+  }
   const activeTask = claimed.task;
+  await request(`/api/codex/tasks/${task.id}`, {
+    method: "PATCH",
+    body: JSON.stringify({ action: "worker-start", processor, workerPid: process.pid, workerUnit: "codex-hermy-vps.service", workerStartedAt: new Date().toISOString() }),
+  });
   await updateVisibleAgent("working", activeTask.title);
   const outputFile = `${runtimeDir}/${activeTask.id}-${randomUUID()}.final`;
   try {

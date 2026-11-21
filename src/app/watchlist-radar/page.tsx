@@ -41,8 +41,7 @@ function SignalCard({ signal }: { signal: Signal }) {
       await fetch("/api/x-content", {
         method: "POST",
         headers: {
-          "Content-Type": "application/json",
-          "x-internal-secret": "[REDACTED]",
+          "Content-Type": "application/json"
         },
         body: JSON.stringify({
           text: signal.draft,

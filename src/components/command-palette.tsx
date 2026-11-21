@@ -8,11 +8,15 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
+import { commandRequiresApproval, dispatchConfirmation, dispatchPresentation } from "@/lib/command-center-domain.mjs";
 import {
+  Activity,
   LayoutDashboard,
   Bot,
   ListChecks,
-  Database,
+  BookOpen,
+  CalendarClock,
+  Network,
   Sparkles,
   Compass,
   Cpu,
@@ -25,6 +29,8 @@ import {
   CornerDownLeft,
   Search,
   Check,
+  AlertTriangle,
+  LoaderCircle,
   type LucideIcon,
 } from "lucide-react";
 
@@ -35,9 +41,14 @@ interface NavItem {
 }
 
 const NAV: NavItem[] = [
-  { label: "Dashboard", href: "/", icon: LayoutDashboard },
-  { label: "Honcho Admin", href: "/honcho", icon: Database },
+  { label: "Overview / Command Center", href: "/", icon: LayoutDashboard },
+  { label: "Action Center", href: "/action-center", icon: Activity },
+  { label: "Memory", href: "/memory-center", icon: BookOpen },
+  { label: "Automations", href: "/automations", icon: CalendarClock },
+  { label: "Security & Network", href: "/security-center", icon: Network },
   { label: "Agents", href: "/agents", icon: Bot },
+  { label: "Infrastructure", href: "/infrastructure", icon: Cpu },
+  { label: "Models & Performance", href: "/infrastructure#model-performance", icon: Cpu },
   { label: "Max", href: "/operations?panel=max", icon: Compass },
   { label: "Atlas", href: "/operations?panel=atlas", icon: Telescope },
   { label: "Aegis", href: "/operations?panel=aegis", icon: ShieldCheck },
@@ -49,18 +60,27 @@ const NAV: NavItem[] = [
   { label: "Home Assistant", href: "/operations?panel=home", icon: House },
   { label: "Tasks", href: "/tasks", icon: ListChecks },
   { label: "Hermes", href: "/hermes", icon: Sparkles },
+  { label: "Settings", href: "/settings", icon: Wrench },
 ];
 
 type Row =
   | { kind: "nav"; item: NavItem }
   | { kind: "dispatch"; query: string };
 
+type DispatchView = { state: "idle" | "sending" | "queued" | "approval" | "running" | "completed" | "failed" | "error"; message: string; requestId?: string; href?: string; query?: string };
+
+function makeIdempotencyKey() {
+  return globalThis.crypto?.randomUUID?.() || `request-${Date.now()}-${Math.random().toString(36).slice(2, 12)}`;
+}
+
 export function CommandPalette() {
   const router = useRouter();
   const [open, setOpen] = useState(false);
   const [query, setQuery] = useState("");
   const [active, setActive] = useState(0);
-  const [dispatched, setDispatched] = useState(false);
+  const [dispatchView, setDispatchView] = useState<DispatchView>({ state: "idle", message: "" });
+  const dispatchInFlight = useRef(false);
+  const idempotency = useRef<{ query: string; key: string } | null>(null);
   const inputRef = useRef<HTMLInputElement>(null);
   const listRef = useRef<HTMLDivElement>(null);
 
@@ -81,7 +101,8 @@ export function CommandPalette() {
     if (open) {
       setQuery("");
       setActive(0);
-      setDispatched(false);
+      setDispatchView({ state: "idle", message: "" });
+      idempotency.current = null;
       // focus after paint so the trap works reliably
       requestAnimationFrame(() => inputRef.current?.focus());
     }
@@ -124,16 +145,16 @@ export function CommandPalette() {
   const runDispatch = useCallback(async (q: string) => {
     // Route anything that acts on the outside world to the Approval Inbox
     // instead of running it immediately.
-    const sideEffecting = /\b(post|tweet|send|dm|message|reply|email|buy|purchase|order|pay|transfer|withdraw|deposit|trade|delete|remove|publish|schedule|book|cancel|unsubscribe)\b/i.test(q);
-    try {
-      await fetch("/api/hermes/dispatch", {
+    const sideEffecting = commandRequiresApproval(q);
+    const key = idempotency.current?.query === q ? idempotency.current.key : makeIdempotencyKey();
+    idempotency.current = { query: q, key };
+    const response = await fetch("/api/hermes/dispatch", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: { "Content-Type": "application/json", "Idempotency-Key": key },
         body: JSON.stringify({ kind: "oneshot", title: q, prompt: q, sideEffecting }),
       });
-    } catch {
-      /* non-blocking — dispatch is best-effort */
-    }
+    const payload = await response.json().catch(() => ({}));
+    return dispatchConfirmation(response.status, payload);
   }, []);
 
   const run = useCallback(
@@ -144,13 +165,26 @@ export function CommandPalette() {
         router.push(row.item.href);
         return;
       }
-      // dispatch: confirm briefly, then jump to the Hermes page so you can
-      // watch it run in the Dispatches panel.
-      setDispatched(true);
-      await runDispatch(row.query);
-      setTimeout(() => { setOpen(false); router.push("/hermes"); }, 650);
+      if (dispatchInFlight.current) return;
+      if (dispatchView.requestId && dispatchView.query === row.query) return;
+      dispatchInFlight.current = true;
+      setDispatchView({ state: "sending", message: "Enviando solicitud a la cola existente…", query: row.query });
+      try {
+        const result = await runDispatch(row.query);
+        const presentation = dispatchPresentation(result.request);
+        setDispatchView({
+          ...presentation,
+          requestId: result.request.id,
+          query: row.query,
+        });
+        idempotency.current = null;
+      } catch (cause) {
+        setDispatchView({ state: "error", message: cause instanceof Error ? cause.message : "No se pudo confirmar la solicitud.", query: row.query });
+      } finally {
+        dispatchInFlight.current = false;
+      }
     },
-    [close, router, runDispatch],
+    [close, dispatchView, router, runDispatch],
   );
 
   // ── keyboard nav within the palette ───────────────────────
@@ -201,7 +235,7 @@ export function CommandPalette() {
       <div
         role="dialog"
         aria-modal="true"
-        aria-label="Command palette"
+            aria-label="Paleta de comandos"
         className="elevated w-full max-w-[560px] overflow-hidden"
         style={{ borderRadius: "var(--r-md)" }}
         onKeyDown={onKeyDown}
@@ -215,8 +249,11 @@ export function CommandPalette() {
             onChange={(e) => {
               setQuery(e.target.value);
               setActive(0);
+              setDispatchView({ state: "idle", message: "" });
+              idempotency.current = null;
             }}
-            placeholder="Search, or ask Hermes…"
+            aria-label="Buscar una sección o escribir una solicitud para Hermes"
+            placeholder="Buscar una sección o solicitar a Hermes…"
             spellCheck={false}
             autoComplete="off"
             className="num flex-1 bg-transparent border-0 outline-none text-[15px] text-[var(--text)] placeholder-[var(--text-3)]"
@@ -251,7 +288,7 @@ export function CommandPalette() {
 
           {dispatchRow && (
             <div className="px-2 pt-1">
-              <div className="eyebrow px-3 py-1.5">Dispatch to Hermes</div>
+              <div className="eyebrow px-3 py-1.5">Nueva solicitud para Hermes</div>
               {(() => {
                 const idx = rows.indexOf(dispatchRow);
                 return (
@@ -261,18 +298,15 @@ export function CommandPalette() {
                     onHover={() => setActive(idx)}
                     onSelect={() => run(dispatchRow)}
                     icon={
-                      dispatched ? (
-                        <Check className="w-4 h-4" style={{ color: "var(--up)" }} />
-                      ) : (
-                        <Sparkles className="w-4 h-4" style={{ color: "var(--accent)" }} />
-                      )
+                      dispatchView.state === "sending" ? <LoaderCircle className="h-4 w-4 animate-spin" aria-hidden="true" />
+                        : dispatchView.state === "error" || dispatchView.state === "failed" ? <AlertTriangle className="h-4 w-4 text-red-300" aria-hidden="true" />
+                          : dispatchView.state !== "idle" ? <Check className="h-4 w-4 text-emerald-300" aria-hidden="true" />
+                            : <Sparkles className="h-4 w-4 text-[var(--accent)]" aria-hidden="true" />
                     }
                   >
-                    {dispatched ? (
-                      <span style={{ color: "var(--up)" }}>Dispatched ✓</span>
-                    ) : (
+                    {dispatchView.state === "sending" ? <span className="text-[var(--text-2)]">Enviando solicitud…</span> : (
                       <span className="text-[var(--text)] truncate">
-                        Ask Hermes:{" "}
+                        Solicitar a Hermes:{" "}
                         <span className="text-[var(--text-2)]">
                           &ldquo;{dispatchRow.query}&rdquo;
                         </span>
@@ -291,13 +325,18 @@ export function CommandPalette() {
           )}
         </div>
 
+        {dispatchView.state !== "idle" && <div aria-live="polite" role={dispatchView.state === "error" ? "alert" : "status"} className={`border-t px-4 py-3 text-xs ${dispatchView.state === "error" ? "border-red-500/30 text-red-200" : "border-[var(--line)] text-[var(--text-2)]"}`}>
+          <p>{dispatchView.message}</p>
+          {dispatchView.requestId && <div className="mt-2 flex flex-wrap items-center justify-between gap-2"><span className="num text-[10px] text-[var(--text-3)]">ID · {dispatchView.requestId}</span><button type="button" onClick={() => { close(); router.push(dispatchView.href || "/tasks"); }} className="rounded-md border border-[var(--line)] px-3 py-1.5 text-xs hover:bg-[var(--surface-1)]">Ver seguimiento</button></div>}
+        </div>}
+
         {/* hint bar */}
         <div className="flex items-center gap-4 px-4 py-2.5 border-t border-[var(--line)] text-[11px] num text-[var(--text-3)]">
           <span className="inline-flex items-center gap-1.5">
-            <CornerDownLeft className="w-3 h-3" /> to run
+            <CornerDownLeft className="w-3 h-3" /> abrir / enviar
           </span>
           <span aria-hidden>·</span>
-          <span>esc to close</span>
+          <span>Esc para cerrar</span>
           <span className="ml-auto inline-flex items-center gap-1.5">
             <kbd className="rounded px-1.5 py-0.5 bg-[var(--surface-1)] border border-[var(--line)]">
               ↑↓

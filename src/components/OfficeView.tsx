@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
+import { getAgentStatusVisual } from "@/lib/agent-status-visual.mjs";
 
 interface AgentActivity {
   timestamp: string;
@@ -34,16 +35,6 @@ const DESK_LAYOUT = [
 ];
 
 // ── Status → visual config ────────────────────────────────
-const STATUS: Record<string, { glow: string; dot: string; bg: string; ring?: string }> = {
-  working:   { glow: "shadow-[0_0_24px_6px_rgba(56,189,248,0.45)]",  dot: "bg-sky-400",     bg: "bg-sky-900/30 border-sky-500/40",     ring: "rgba(56,189,248,0.5)" },
-  idle:      { glow: "shadow-[0_0_12px_2px_rgba(251,191,36,0.2)]",   dot: "bg-yellow-400",  bg: "bg-yellow-900/20 border-yellow-500/30" },
-  error:     { glow: "shadow-[0_0_12px_2px_rgba(248,113,113,0.3)]",  dot: "bg-red-400",     bg: "bg-red-900/20 border-red-500/30" },
-  offline:   { glow: "",                                               dot: "bg-neutral-600", bg: "bg-neutral-800/20 border-neutral-700/20" },
-  online:    { glow: "shadow-[0_0_16px_3px_rgba(52,211,153,0.3)]",   dot: "bg-emerald-400", bg: "bg-emerald-900/20 border-emerald-500/30" },
-  active:    { glow: "shadow-[0_0_16px_3px_rgba(52,211,153,0.3)]",   dot: "bg-emerald-400", bg: "bg-emerald-900/20 border-emerald-500/30" },
-  completed: { glow: "shadow-[0_0_12px_2px_rgba(251,191,36,0.2)]",   dot: "bg-yellow-400",  bg: "bg-yellow-900/20 border-yellow-500/30" },
-  paused:    { glow: "",                                               dot: "bg-neutral-500", bg: "bg-neutral-800/30 border-neutral-700/30" },
-};
 
 // ── Per-agent walk timing (keeps them out of sync) ────────
 const WALK = {
@@ -238,9 +229,8 @@ function MonitorScreen({ isWorking }: { isWorking: boolean }) {
 // ── Agent desk tile ───────────────────────────────────────
 function AgentDesk({ agent, label, isMax }: { agent: Agent | undefined; label: string; isMax: boolean }) {
   const rawStatus = agent?.status ?? "offline";
-  const statusKey = STATUS[rawStatus] ? rawStatus : "idle";
-  const colors = STATUS[statusKey];
-  const isWorking = rawStatus === "working";
+  const colors = getAgentStatusVisual(rawStatus).office;
+  const isWorking = rawStatus === "working" || rawStatus === "active";
   const isOffline = rawStatus === "offline" || !agent;
   const spriteSize = isMax ? 56 : 44;
   const walk = WALK[agent?.id as keyof typeof WALK] ?? WALK.atlas;
@@ -421,11 +411,14 @@ export default function OfficeView({ agents }: { agents: Agent[] }) {
         {[
           { status: "working", label: "Working" },
           { status: "idle",    label: "Idle" },
+          { status: "online",  label: "Online" },
+          { status: "paused",  label: "Paused" },
+          { status: "unknown", label: "Unknown" },
           { status: "offline", label: "Offline" },
           { status: "error",   label: "Error" },
         ].map(({ status, label }) => (
           <div key={status} className="flex items-center gap-1.5">
-            <div className={`w-2 h-2 rounded-full ${STATUS[status]?.dot ?? "bg-neutral-600"}`} />
+            <div className={`w-2 h-2 rounded-full ${getAgentStatusVisual(status).office.dot}`} />
             <span className="text-[10px] text-neutral-500 uppercase tracking-wider">{label}</span>
           </div>
         ))}

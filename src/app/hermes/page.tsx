@@ -152,9 +152,12 @@ function levelColor(l: EvLevel): string {
 }
 
 // ── Health chip ───────────────────────────────────────────
-function HealthChip({ health }: { health: Health | null }) {
-  const online = !!health?.online;
-  const color = online ? "var(--up)" : "var(--warn)";
+function HealthChip({ health, resolved }: { health: Health | null; resolved: boolean }) {
+  const online = health?.online === true;
+  const pending = !resolved;
+  const unavailable = resolved && health === null;
+  const color = online ? "var(--up)" : pending || unavailable ? "var(--text-3)" : "var(--warn)";
+  const label = pending ? "Consultando estado…" : unavailable ? "Estado no disponible" : online ? "Online" : "Offline · bridge idle";
   return (
     <div
       className="flex items-center gap-2 rounded-full border px-3 py-1.5"
@@ -177,7 +180,7 @@ function HealthChip({ health }: { health: Health | null }) {
         />
       </span>
       <span className="text-[12px] font-semibold">
-        {online ? "Online" : "Offline · bridge idle"}
+        {label}
       </span>
       {health?.lastSeen && (
         <span className="num text-[10.5px] text-[var(--text-3)]">
@@ -193,11 +196,12 @@ function DispatchBar({ onDone }: { onDone: () => void }) {
   const [text, setText] = useState("");
   const [side, setSide] = useState(false);
   const [busy, setBusy] = useState(false);
-  const [toast, setToast] = useState<string | null>(null);
+  const [toast, setToast] = useState<{ text: string; error: boolean } | null>(null);
   const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const idempotency = useRef(new Map<string, string>());
 
-  const flash = (msg: string) => {
-    setToast(msg);
+  const flash = (msg: string, error = false) => {
+    setToast({ text: msg, error });
     if (timer.current) clearTimeout(timer.current);
     timer.current = setTimeout(() => setToast(null), 4000);
   };
@@ -206,26 +210,23 @@ function DispatchBar({ onDone }: { onDone: () => void }) {
   const submit = async () => {
     const title = text.trim();
     if (!title || busy) return;
+    if (!idempotency.current.has(title)) idempotency.current.set(title, globalThis.crypto?.randomUUID?.() || `dispatch-${Date.now()}-${Math.random().toString(36).slice(2)}`);
     setBusy(true);
     try {
       const r = await fetch("/api/hermes/dispatch", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ kind: "oneshot", title, sideEffecting: side }),
+        headers: { "Content-Type": "application/json", "Idempotency-Key": idempotency.current.get(title) || "" },
+        body: JSON.stringify({ kind: "oneshot", action: "freeform", capability: "unknown", title, prompt: title, sideEffecting: side }),
       });
-      if (r.ok) {
-        setText("");
-        flash(
-          side
-            ? "Sent to approval inbox — awaiting your go-ahead."
-            : "Queued for Hermes."
-        );
-        onDone();
-      } else {
-        flash("Dispatch failed. Try again.");
-      }
-    } catch {
-      flash("Dispatch failed. Try again.");
+      const payload = await r.json().catch(() => ({}));
+      const request = payload?.request;
+      if (!r.ok || !request?.id || !request?.status) throw new Error(payload?.error || `Hermy HQ respondió HTTP ${r.status} sin confirmar la solicitud`);
+      idempotency.current.delete(title);
+      setText("");
+      flash(`Solicitud ${request.id}: ${request.status}${request.status === "awaiting_approval" ? " · requiere aprobación" : ""}.`);
+      onDone();
+    } catch (error) {
+      flash(error instanceof Error ? error.message : "No se pudo confirmar el envío. Reintenta con la misma clave.", true);
     } finally {
       setBusy(false);
     }
@@ -265,7 +266,7 @@ function DispatchBar({ onDone }: { onDone: () => void }) {
               />
             </span>
             <span className="text-[12px] font-medium text-[var(--text-2)]">
-              side-effecting?
+              Force approval
             </span>
           </button>
           <Button variant="primary" onClick={submit} disabled={busy || !text.trim()}>
@@ -276,8 +277,8 @@ function DispatchBar({ onDone }: { onDone: () => void }) {
       </div>
       {toast && (
         <p className="mt-3 text-[12.5px] text-[var(--text-2)] flex items-center gap-1.5">
-          <Check className="w-3.5 h-3.5" style={{ color: "var(--up)" }} />
-          {toast}
+          {toast.error ? <X className="w-3.5 h-3.5" style={{ color: "var(--down)" }} /> : <Check className="w-3.5 h-3.5" style={{ color: "var(--up)" }} />}
+          {toast.text}
         </p>
       )}
     </Panel>
@@ -735,6 +736,7 @@ function ActivityFeed({ events }: { events: Ev[] }) {
 // ── Main ──────────────────────────────────────────────────
 export default function HermesPage() {
   const [health, setHealth] = useState<Health | null>(null);
+  const [healthResolved, setHealthResolved] = useState(false);
   const [inbox, setInbox] = useState<Req[]>([]);
   const [pending, setPending] = useState(0);
   const [events, setEvents] = useState<Ev[]>([]);
@@ -758,7 +760,8 @@ export default function HermesPage() {
       ),
       getJSON<{ jobs: CronJob[]; syncedAt: string }>("/api/hermes/crons"),
     ]);
-    if (h) setHealth(h);
+    setHealth(h);
+    setHealthResolved(true);
     if (reqs) {
       setInbox(reqs.requests ?? []);
       setPending(reqs.pending ?? reqs.requests?.length ?? 0);
@@ -800,7 +803,7 @@ export default function HermesPage() {
             </h1>
           </div>
           <div className="flex items-center gap-2.5">
-            <HealthChip health={health} />
+            <HealthChip health={health} resolved={healthResolved} />
             <button
               type="button"
               onClick={manualRefresh}

@@ -1,5 +1,6 @@
 "use client";
 
+import { formatEcuadorTimestamp } from "@/lib/ecuador-time";
 /* ───────────────────────────────────────────────────────────
    Hermy HQ · Approval inbox
    "Everything that needs your tap" queue.
@@ -29,9 +30,9 @@ interface Req {
   error: string | null;
   createdAt: string;
 }
-interface Approval { id: string; request_id: string; status: string; action: string; requested_by: string; approved_by: string | null; reason: string | null; created_at: string; resolved_at: string | null; expires_at: string; title: string | null; request_status: string | null; request_result: string | null; request_error: string | null; }
-interface Incident { id: string; incident: string; evidence: string; cause: string; hypothesis: string; remediation: string; validation: string; limitations: string; next_action: string; provider: string | null; model: string | null; duration_ms: number | null; status: string; agent: string | null; request_id: string | null; updated_at: string; }
-interface Attempt { id: string; request_id: string; attempt_no: number; provider: string; model: string; status: string; reason: string | null; duration_ms: number | null; created_at: string; finished_at: string | null; }
+interface Approval { id: string; request_id: string; status: string; action: string; requested_by: string; approved_by: string | null; rejected_by?: string | null; resolved_by?: string | null; decision?: string | null; result?: string | null; incident_id?: string | null; reason: string | null; created_at: string; resolved_at: string | null; expires_at: string; parameters_snapshot?: Record<string, unknown> | null; title: string | null; request_status: string | null; request_result: string | null; request_error: string | null; }
+interface Incident { id: string; incident: string; evidence: string; cause: string; hypothesis: string; remediation: string; validation: string; limitations: string; next_action: string; provider: string | null; model: string | null; duration_ms: number | null; invalid_duration_ms?: number | null; cause_confirmed?: boolean | null; status: string; agent: string | null; request_id: string | null; updated_at: string; }
+interface Attempt { id: string; request_id: string; attempt_no: number; attempt_number?: number | null; provider: string; model: string; requested_provider?: string | null; requested_model?: string | null; gateway?: string | null; actual_provider?: string | null; actual_model?: string | null; underlying_provider?: string | null; agent_id?: string; request_kind?: string | null; request_origin?: string | null; request_status?: string | null; telemetry_class?: string; route_category?: string; status: string; reason: string | null; error_class?: string | null; failover_reason?: string | null; cost_source?: string | null; usage_source?: string | null; usage_scope?: string | null; http_status?: number | null; remote_attempted?: boolean | null; remote_attempt_status?: string | null; duration_ms: number | null; prompt_tokens?: number | null; completion_tokens?: number | null; total_tokens?: number | null; auxiliary_total_tokens?: number | null; total_including_auxiliary_tokens?: number | null; reasoning_tokens?: number | null; cache_read_tokens?: number | null; cache_write_tokens?: number | null; reported_cost?: number | null; cost_currency?: string | null; cost_status?: string | null; free_route?: boolean | null; created_at: string; finished_at: string | null; }
 
 // ── Helpers ───────────────────────────────────────────────
 function timeAgo(d: string | null): string {
@@ -221,6 +222,35 @@ function InboxCard({
   );
 }
 
+
+function ActionApprovalCard({ approval, onAction }: { approval: Approval; onAction: () => void }) {
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState("");
+  async function decide(action: "approve" | "reject") {
+    setBusy(true); setError("");
+    try {
+      const response = await fetch("/api/hermes/approvals", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ id: approval.id, action }),
+      });
+      const payload = await response.json().catch(() => ({}));
+      if (!response.ok) throw new Error(String(payload.error || "No se pudo decidir esta aprobación"));
+      onAction();
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : "No se pudo decidir esta aprobación");
+    } finally { setBusy(false); }
+  }
+  return <Panel className="p-4">
+    <div className="flex flex-wrap justify-between gap-2"><strong className="text-sm">{approval.title || approval.action}</strong><Pill tone="warn">{approval.status}</Pill></div>
+    <p className="mt-1 text-xs text-[var(--text-3)]">{approval.action} · solicitud {approval.request_id} · solicitada por {approval.requested_by} · vence {formatEcuadorTimestamp(approval.expires_at)}</p>
+    {approval.reason && <p className="mt-2 text-xs">{approval.reason}</p>}
+    {approval.parameters_snapshot && <details className="mt-2 text-xs"><summary className="cursor-pointer">Acción y recursos afectados</summary><pre className="mt-2 max-h-56 overflow-auto whitespace-pre-wrap break-words rounded bg-[var(--surface-2)] p-2">{JSON.stringify(approval.parameters_snapshot, null, 2)}</pre></details>}
+    <div className="mt-3 flex gap-2"><button type="button" disabled={busy} onClick={() => void decide("approve")} className="rounded-full px-3 py-1.5 text-xs text-emerald-300 border border-emerald-500/30 disabled:opacity-50">Aprobar esta acción</button><button type="button" disabled={busy} onClick={() => void decide("reject")} className="rounded-full px-3 py-1.5 text-xs text-red-300 border border-red-500/30 disabled:opacity-50">Rechazar</button></div>
+    {error && <p role="alert" className="mt-2 text-xs text-red-300">{error}</p>}
+  </Panel>;
+}
+
 // ── Main ──────────────────────────────────────────────────
 export function ApprovalInbox({ compact = false }: { compact?: boolean }) {
   const [requests, setRequests] = useState<Req[]>([]);
@@ -262,7 +292,8 @@ export function ApprovalInbox({ compact = false }: { compact?: boolean }) {
     [load]
   );
 
-  const count = pending || requests.length;
+  const standaloneApprovals = approvals.filter((approval) => !requests.some((request) => request.id === approval.request_id));
+  const count = Math.max(pending, requests.length) + standaloneApprovals.length;
   const visible = compact ? requests.slice(0, 3) : requests;
 
   return (
@@ -275,7 +306,7 @@ export function ApprovalInbox({ compact = false }: { compact?: boolean }) {
         </Pill>
       </div>
 
-      {loaded && requests.length === 0 ? (
+      {loaded && requests.length === 0 && standaloneApprovals.length === 0 ? (
         <Panel className="p-2">
           <EmptyState
             icon={<Check className="w-6 h-6" style={{ color: "var(--up)" }} />}
@@ -283,7 +314,7 @@ export function ApprovalInbox({ compact = false }: { compact?: boolean }) {
             hint="Side-effecting work waiting on your call will land here."
           />
         </Panel>
-      ) : requests.length === 0 ? (
+      ) : requests.length === 0 && standaloneApprovals.length === 0 ? (
         // pre-load: keep it calm, mirror empty framing
         <Panel className="p-2">
           <EmptyState
@@ -296,9 +327,10 @@ export function ApprovalInbox({ compact = false }: { compact?: boolean }) {
           {visible.map((req) => (
             <div key={req.id}>
               <InboxCard req={req} compact={compact} onAction={() => handleAction(req.id)} />
-              {(() => { const a = approvals.find((x) => x.request_id === req.id); return a ? <p className="mt-1 px-2 text-[10px] text-[var(--text-3)]">Approval: {a.status} · requested by {a.requested_by}{a.reason ? ` · ${a.reason}` : ""}</p> : null; })()}
+              {(() => { const a = approvals.find((x) => x.request_id === req.id); return a ? <div className="mt-2 px-2 text-[10px] text-[var(--text-3)]"><p>Approval: {a.status} · {a.action} · solicitada por {a.requested_by} · vence {formatEcuadorTimestamp(a.expires_at)}</p>{(a.approved_by || a.rejected_by || a.resolved_by) && <p>Decidió: {a.approved_by || a.rejected_by || a.resolved_by}{a.decision ? " · " + a.decision : ""}{a.resolved_at ? " · " + formatEcuadorTimestamp(a.resolved_at) : ""}</p>}{a.result && <p>Resultado: {a.result}</p>}{a.incident_id && <p>Incidente: {a.incident_id}</p>}{a.parameters_snapshot && <details className="mt-1"><summary className="cursor-pointer">Ver acción y parámetros exactos</summary><pre className="mt-1 max-h-48 overflow-auto whitespace-pre-wrap break-words">{JSON.stringify(a.parameters_snapshot, null, 2)}</pre></details>}</div> : null; })()}
             </div>
           ))}
+          {standaloneApprovals.slice(0, compact ? 3 : 100).map((approval) => <ActionApprovalCard key={approval.id} approval={approval} onAction={() => load()} />)}
           {compact && count > 3 && (
             <a
               href="/hermes"
@@ -319,8 +351,8 @@ export function ApprovalInbox({ compact = false }: { compact?: boolean }) {
           <div className="mt-3 space-y-2">
             {history.approvals.length === 0 ? <p className="text-xs text-[var(--text-3)]">No approval history.</p> : history.approvals.map((a) => <div key={a.id} className="rounded-lg p-3 text-xs" style={{ background: "var(--surface-2)" }}>
               <div className="flex flex-wrap justify-between gap-2"><span className="font-medium">{a.title || a.request_id}</span><Pill tone={a.status === "approved" ? "accent" : a.status === "rejected" ? "down" : "neutral"}>{a.status}</Pill></div>
-              <p className="mt-1 text-[var(--text-3)]">{a.action} · requested by {a.requested_by} · {a.approved_by ? `resolved by ${a.approved_by} · ` : ""}expires {new Date(a.expires_at).toLocaleString()}</p>
-              {a.reason && <p className="mt-1 text-[var(--text-2)]">Reason: {a.reason}</p>}
+              <p className="mt-1 text-[var(--text-3)]">{a.action} · requested by {a.requested_by} · {a.approved_by ? `resolved by ${a.approved_by} · ` : ""}expires {formatEcuadorTimestamp(a.expires_at)}</p>
+              {a.reason && <p className="mt-1 text-[var(--text-2)]">Reason: {a.reason}</p>}{a.result && <p className="mt-1 text-[var(--text-2)]">Recorded result: {a.result}</p>}{a.incident_id && <p className="mt-1 text-[var(--text-3)]">Incident: {a.incident_id}</p>}
               {a.request_result && <p className="mt-1 text-[var(--up)]">Result: {a.request_result}</p>}
               {a.request_error && <p className="mt-1 text-[var(--down)]">Error: {a.request_error}</p>}
             </div>)}
@@ -332,13 +364,13 @@ export function ApprovalInbox({ compact = false }: { compact?: boolean }) {
             {history.incidents.length === 0 ? <p className="text-xs text-[var(--text-3)]">No incident history.</p> : history.incidents.map((i) => <div key={i.id} className="rounded-lg p-3 text-xs" style={{ background: "var(--surface-2)" }}>
               <div className="flex flex-wrap justify-between gap-2"><span className="font-medium">{i.incident}</span><Pill tone={i.status === "resolved" ? "accent" : "down"}>{i.status}</Pill></div>
               <p className="mt-1 text-[var(--text-3)]">{i.agent || "unknown agent"} · {i.provider || "—"}/{i.model || "—"}{i.duration_ms == null ? "" : ` · ${i.duration_ms} ms`}</p>
-              <dl className="mt-2 grid gap-1 text-[var(--text-2)]"><div><dt className="inline font-medium">Cause: </dt><dd className="inline">{i.cause}</dd></div><div><dt className="inline font-medium">Hypothesis: </dt><dd className="inline">{i.hypothesis}</dd></div><div><dt className="inline font-medium">Remediation: </dt><dd className="inline">{i.remediation}</dd></div><div><dt className="inline font-medium">Validation: </dt><dd className="inline">{i.validation}</dd></div><div><dt className="inline font-medium">Limitations: </dt><dd className="inline">{i.limitations}</dd></div><div><dt className="inline font-medium">Next action: </dt><dd className="inline">{i.next_action}</dd></div></dl>
+              {i.invalid_duration_ms != null && <p className="mt-1 text-amber-300">Duración histórica inválida preservada: {i.invalid_duration_ms} ms; no se usa como medición.</p>}<dl className="mt-2 grid gap-1 text-[var(--text-2)]"><div><dt className="inline font-medium">Cause: </dt><dd className="inline">{i.cause}</dd></div><div><dt className="inline font-medium">Hypothesis: </dt><dd className="inline">{i.hypothesis}</dd></div><div><dt className="inline font-medium">Remediation: </dt><dd className="inline">{i.remediation}</dd></div><div><dt className="inline font-medium">Validation: </dt><dd className="inline">{i.validation}</dd></div><div><dt className="inline font-medium">Limitations: </dt><dd className="inline">{i.limitations}</dd></div><div><dt className="inline font-medium">Next action: </dt><dd className="inline">{i.next_action}</dd></div></dl>
             </div>)}
           </div>
         </Panel>
         <Panel className="p-4">
           <h3 className="text-sm font-medium">Inference attempts</h3>
-          <div className="mt-3 space-y-2">{history.attempts.length === 0 ? <p className="text-xs text-[var(--text-3)]">No inference attempts.</p> : history.attempts.map((a) => <div key={a.id} className="flex flex-wrap justify-between gap-2 rounded-lg p-3 text-xs" style={{ background: "var(--surface-2)" }}><span>#{a.attempt_no} · {a.provider}/{a.model} · {a.request_id}</span><span className={a.status === "success" ? "text-[var(--up)]" : "text-[var(--down)]"}>{a.status}{a.duration_ms == null ? "" : ` · ${a.duration_ms} ms`}{a.reason ? ` · ${a.reason}` : ""}</span></div>)}</div>
+          <div className="mt-3 space-y-2">{history.attempts.length === 0 ? <p className="text-xs text-[var(--text-3)]">No inference attempts.</p> : history.attempts.map((a) => <div key={a.id} className="flex flex-wrap justify-between gap-2 rounded-lg p-3 text-xs" style={{ background: "var(--surface-2)" }}><span>#{a.attempt_number ?? a.attempt_no} · {a.telemetry_class || "legacy"} · agente {a.agent_id || "unattributed"} · request {a.request_id}<br />seleccionado {a.requested_provider || a.provider}/{a.requested_model || a.model} · efectivo {a.actual_provider || "unknown"}/{a.actual_model || "unknown"} · intento {a.status} · tarea {a.request_status || "unlinked"} · ruta {a.route_category || "unknown"}<br />uso {a.total_tokens == null ? "UNKNOWN" : a.total_tokens + " tokens"} · fuente {a.usage_source || "legacy/unknown"} · auxiliar {a.auxiliary_total_tokens == null ? "UNKNOWN" : a.auxiliary_total_tokens}{a.http_status == null ? "" : " · HTTP " + a.http_status} · transporte {a.remote_attempt_status || "unknown"}{a.reported_cost == null ? " · cost " + (a.cost_status || "unknown") : " · " + a.reported_cost + " " + (a.cost_currency || "") + " (" + (a.cost_status || "reported") + ")"}{a.failover_reason ? " · fallback " + a.failover_reason : ""}</span><span className={a.status === "success" ? "text-[var(--up)]" : "text-[var(--down)]"}>{a.duration_ms == null ? "" : a.duration_ms + " ms"}{a.error_class ? " · " + a.error_class : ""}{a.reason ? " · " + a.reason : ""}</span></div>)}</div>
         </Panel>
       </div>}
     </div>

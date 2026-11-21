@@ -1,8 +1,12 @@
 "use client";
 
+import { formatEcuadorTimestamp } from "@/lib/ecuador-time";
 import { useEffect, useState, useCallback, useRef } from "react";
 import { signIn } from "next-auth/react";
+import Link from "next/link";
 import OfficeView from "@/components/OfficeView";
+import { CodexManualDispatch } from "@/components/codex-manual-dispatch";
+import { AGENT_STATUS_VISUALS, getAgentStatusVisual } from "@/lib/agent-status-visual.mjs";
 
 interface AgentActivity {
   timestamp: string;
@@ -10,26 +14,52 @@ interface AgentActivity {
   result?: string;
 }
 
+interface AgentTask {
+  id: string;
+  title: string;
+  kind: string;
+  status: string;
+  origin: string;
+  result?: string | null;
+  error?: string | null;
+  durationMs?: number | null;
+  createdAt?: string;
+  updatedAt?: string;
+  dependencies?: string[];
+}
+
 interface Agent {
   id: string;
   name: string;
   emoji: string;
   role: string;
-  status: "idle" | "working" | "error" | "offline" | "online" | "active" | "mixed" | "paused";
+  status: "idle" | "working" | "error" | "offline" | "online" | "active" | "mixed" | "paused" | "unknown";
   currentTask?: string;
   lastActive?: string;
   tasksCompleted: number;
   totalCost: number;
   recentActivity: AgentActivity[];
+  activeTasks?: AgentTask[];
+  history?: AgentTask[];
+  delegations?: AgentTask[];
+  lastResult?: string | null;
+  lastError?: string | null;
+  executionDurationMs?: number | null;
   provider?: string;
   model?: string;
   selection?: string;
   runtimeProvider?: string;
+  availability?: { state: string; label: string; reason?: string };
+  reportedStatus?: string;
+  processState?: string;
+  dependencyState?: string;
+  executionCapability?: string;
   circuit?: { open?: boolean; activeAgent?: string; reason?: string; openedAt?: number; failoverAt?: number; nextProbeAt?: number; taskId?: string; taskTitle?: string; fallbackFailed?: boolean };
 }
 
 interface AgentChatResponse {
   reply?: string;
+  error?: string;
   requestId?: string;
 }
 
@@ -37,27 +67,8 @@ interface AgentRequestStatus {
   request: { status: string; result?: string | null; error?: string | null };
 }
 
-const statusConfig: Record<string, { color: string; dot: string; label: string; pulse?: boolean }> = {
-  idle: { color: "var(--warn)", dot: "var(--warn)", label: "Idle" },
-  working: { color: "var(--accent)", dot: "var(--accent)", label: "Working", pulse: true },
-  error: { color: "var(--down)", dot: "var(--down)", label: "Error" },
-  offline: { color: "var(--text-3)", dot: "var(--text-4)", label: "Offline" },
-  online: { color: "var(--up)", dot: "var(--up)", label: "Online", pulse: true },
-  active: { color: "var(--up)", dot: "var(--up)", label: "Active", pulse: true },
-  mixed: { color: "var(--warn)", dot: "var(--warn)", label: "Partial" },
-  paused: { color: "var(--text-3)", dot: "var(--text-4)", label: "Paused" },
-};
+const statusConfig: Record<string, { color: string; dot: string; label: string; pulse?: boolean }> = AGENT_STATUS_VISUALS;
 
-const roleColors: Record<string, string> = {
-  max: "from-amber-500/20 to-amber-600/5 border-amber-500/20",
-  codex: "from-blue-500/20 to-blue-600/5 border-blue-500/20",
-  atlas: "from-sky-500/20 to-sky-600/5 border-sky-500/20",
-  aegis: "from-emerald-500/20 to-emerald-600/5 border-emerald-500/20",
-  milo: "from-violet-500/20 to-violet-600/5 border-violet-500/20",
-  pulse: "from-pink-500/20 to-pink-600/5 border-pink-500/5",
-  ledger: "from-orange-500/20 to-orange-600/5 border-orange-500/20",
-  domus: "from-teal-500/20 to-teal-600/5 border-teal-500/20",
-};
 
 const ICON_CHOICES: Record<string, string[]> = {
   max: ["🧭", "🐺", "🧠", "🎯"],
@@ -89,7 +100,7 @@ function AgentCard({ agent, isExpanded, onToggle, onControl, onStop, onConnectMi
   onConnectMilo: () => void;
   onSetIcon: (agent: Agent, emoji: string) => void;
 }) {
-  const status = statusConfig[agent.status] || statusConfig.offline;
+  const status = getAgentStatusVisual(agent.status);
 
   return (
     <div className="panel panel-interactive overflow-hidden">
@@ -113,6 +124,7 @@ function AgentCard({ agent, isExpanded, onToggle, onControl, onStop, onConnectMi
               <span className="text-[10px] font-medium" style={{ color: status.color }}>{status.label}</span>
             </div>
             <p className="text-[12px] text-[var(--text-3)] mt-1">{agent.role}</p>
+            <p className="text-[10px] text-[var(--text-4)] mt-1" title={agent.availability?.reason}>Disponibilidad: {agent.availability?.label || "No comprobada"}</p>
             {agent.model && (
               <div className="mt-2 text-[10px] leading-4 text-[var(--text-4)]">
                 <span className="text-[var(--text-3)]">Modelo:</span> {agent.model}
@@ -126,7 +138,7 @@ function AgentCard({ agent, isExpanded, onToggle, onControl, onStop, onConnectMi
                     </div>
                     {agent.circuit.open && agent.circuit.reason && <div className="truncate" title={agent.circuit.reason}>Causa: {agent.circuit.reason}</div>}
                     {agent.circuit.open && agent.circuit.taskTitle && <div className="truncate" title={agent.circuit.taskTitle}>Tarea: {agent.circuit.taskTitle}</div>}
-                    {agent.circuit.open && agent.circuit.nextProbeAt && <div>Próxima prueba: {new Date(agent.circuit.nextProbeAt).toLocaleString()}</div>}
+                    {agent.circuit.open && agent.circuit.nextProbeAt && <div>Próxima prueba: {formatEcuadorTimestamp(agent.circuit.nextProbeAt)}</div>}
                   </div>
                 )}
               </div>
@@ -177,6 +189,11 @@ function AgentCard({ agent, isExpanded, onToggle, onControl, onStop, onConnectMi
             Connect Gmail
           </button>
         )}
+        <Link href={"/tasks?agent=" + encodeURIComponent(agent.id)} onClick={(event) => event.stopPropagation()}
+          className="rounded-full px-3 py-1.5 text-[11px] font-medium text-[var(--accent)]"
+          style={{ border: "1px solid color-mix(in srgb, var(--accent) 28%, transparent)" }}>
+          Crear tarea
+        </Link>
         <select
           value={agent.emoji}
           aria-label={`Change ${agent.name} icon`}
@@ -186,7 +203,7 @@ function AgentCard({ agent, isExpanded, onToggle, onControl, onStop, onConnectMi
         >
           {(ICON_CHOICES[agent.id] || [agent.emoji]).map((icon) => <option key={icon} value={icon}>{icon}</option>)}
         </select>
-        <span className="text-[10px] text-[var(--text-4)]">Queue bypass while paused</span>
+        <span className="text-[10px] text-[var(--text-4)]">En pausa se pueden encolar tareas; no se ejecutan hasta reanudar.</span>
       </div>
 
       {/* Expanded activity feed */}
@@ -208,6 +225,18 @@ function AgentCard({ agent, isExpanded, onToggle, onControl, onStop, onConnectMi
               ))}
             </div>
           )}
+          <section className="mt-4 space-y-2.5 border-t border-[var(--line)] pt-4">
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <h4 className="eyebrow">Tareas, delegaciones y resultados</h4>
+              <Link href={"/tasks?agent=" + encodeURIComponent(agent.id)} className="text-[11px] text-[var(--accent)]">Nueva tarea →</Link>
+            </div>
+            <p className="text-[11px] text-[var(--text-3)]">Tareas activas: {agent.activeTasks?.length || 0} · duración reciente: {agent.executionDurationMs == null ? "sin dato" : agent.executionDurationMs + " ms"}</p>
+            {agent.activeTasks?.slice(0, 6).map((task) => <div key={"active-" + task.id} className="rounded-lg border border-[var(--line)] p-2.5 text-xs"><strong>{task.status}</strong> · {task.title}<div className="mt-1 text-[var(--text-3)]">{task.id} · {task.kind}</div></div>)}
+            {agent.lastResult && <details className="rounded-lg border border-[var(--line)] p-2.5 text-xs"><summary className="cursor-pointer">Último resultado</summary><pre className="mt-2 whitespace-pre-wrap break-words font-sans">{agent.lastResult}</pre></details>}
+            {agent.lastError && <details className="rounded-lg border border-red-500/20 p-2.5 text-xs text-red-300"><summary className="cursor-pointer">Último error</summary><pre className="mt-2 whitespace-pre-wrap break-words font-sans">{agent.lastError}</pre></details>}
+            {agent.delegations?.slice(0, 5).map((task) => <div key={"delegation-" + task.id} className="rounded-lg border border-[var(--line)] p-2.5 text-xs">Delegación · {task.status} · {task.title}</div>)}
+            <details className="text-xs"><summary className="cursor-pointer">Historial reciente ({agent.history?.length || 0})</summary><div className="mt-2 space-y-1">{agent.history?.slice(0, 10).map((task) => <p key={"history-" + task.id}>{task.status} · {task.title} · {task.durationMs == null ? "duración sin dato" : task.durationMs + " ms"}</p>)}</div></details>
+          </section>
         </div>
       )}
     </div>
@@ -215,29 +244,63 @@ function AgentCard({ agent, isExpanded, onToggle, onControl, onStop, onConnectMi
 }
 
 // ── Live Agent Chat ───────────────────────────────────────
-function AgentChat({ agent, onClose }: { agent: Agent; onClose: () => void }) {
+function AgentChat({ agent, onClose, onCreated, onAskMax }: {
+  agent: Agent;
+  onClose: () => void;
+  onCreated: () => void;
+  onAskMax: () => void;
+}) {
   const [input, setInput] = useState("");
   const [msgs, setMsgs] = useState<{ role: "user"|"assistant"; content: string }[]>([]);
+  const [readOnlyMode, setReadOnlyMode] = useState(false);
+  const [maxProvider, setMaxProvider] = useState<"auto" | "excelnt">("auto");
+  const [excelntModels, setExcelntModels] = useState<string[]>([]);
+  const [excelntCatalogLoading, setExcelntCatalogLoading] = useState(false);
+  const [excelntCatalogError, setExcelntCatalogError] = useState("");
+  const [selectedExcelntModel, setSelectedExcelntModel] = useState("");
   const [loading, setLoading] = useState(false);
   const endRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => { endRef.current?.scrollIntoView({ behavior: "smooth" }); }, [msgs]);
 
+  useEffect(() => {
+    if (agent.id !== "max") return;
+    let cancelled = false;
+    setExcelntCatalogLoading(true);
+    setExcelntCatalogError("");
+    fetch("/api/hermes/max-models", { cache: "no-store" })
+      .then(async (response) => {
+        const body = await response.json().catch(() => ({}));
+        if (!response.ok || body.provider !== "excelnt" || !Array.isArray(body.models)) {
+          throw new Error(body.error || "El catálogo EXCELNT no está disponible.");
+        }
+        if (!cancelled) {
+          const models = body.models.filter((model: unknown): model is string => typeof model === "string");
+          setExcelntModels(models);
+          setSelectedExcelntModel((current) => current && models.includes(current)
+            ? current : models.includes("gpt-6-luna") ? "gpt-6-luna" : models[0] || "");
+        }
+      })
+      .catch((error) => { if (!cancelled) setExcelntCatalogError(error instanceof Error ? error.message : "Catálogo EXCELNT no disponible."); })
+      .finally(() => { if (!cancelled) setExcelntCatalogLoading(false); });
+    return () => { cancelled = true; };
+  }, [agent.id]);
+
   async function waitForRequest(id: string): Promise<string> {
     for (let attempt = 0; attempt < 90; attempt += 1) {
       await new Promise(resolve => setTimeout(resolve, 2000));
       const response = await fetch(`/api/hermes/requests/${id}`);
-      if (!response.ok) throw new Error("Could not retrieve Max's request");
+      if (!response.ok) throw new Error("No se pudo consultar el estado de la solicitud.");
       const data = await response.json() as AgentRequestStatus;
       if (data.request.status === "done") return data.request.result || "Max completed the request without a written result.";
       if (data.request.status === "awaiting_approval") {
         return "Esta tarea espera tu aprobación en Hermes → Dispatches. No se ejecutará hasta que la apruebes.";
       }
       if (["failed", "rejected"].includes(data.request.status)) {
-        return `Max could not complete this request: ${data.request.error || data.request.status}.`;
+        return `Max no pudo completar la solicitud: ${data.request.error || data.request.status}.`;
       }
     }
-    return "Max is still working. Open Hermes → Dispatches to follow this request.";
+    return "La solicitud sigue en curso. Puedes revisar su estado en Hermes → Dispatches.";
   }
 
   async function send() {
@@ -251,22 +314,28 @@ function AgentChat({ agent, onClose }: { agent: Agent; onClose: () => void }) {
       const r = await fetch("/api/agent-chat", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ agentId: agent.id, message: text, history: msgs }),
+        body: JSON.stringify({
+          agentId: agent.id, message: text, history: msgs,
+          ...(agent.id === "max" ? {
+            execution_mode: maxProvider === "excelnt" || readOnlyMode ? "read_only" : "side_effecting",
+            ...(maxProvider === "excelnt" ? { provider: "excelnt", model: selectedExcelntModel } : {}),
+          } : {}),
+        }),
       });
       const d = await r.json() as AgentChatResponse;
-      if (!r.ok || !d.reply) throw new Error("Agent chat request failed");
+      if (!r.ok || !d.reply) throw new Error(d.error || "No se pudo enviar la solicitud al agente.");
       setMsgs([...newMsgs, { role: "assistant", content: d.reply }]);
       if (d.requestId) {
         const result = await waitForRequest(d.requestId);
         setMsgs(current => [...current, { role: "assistant", content: result }]);
       }
-    } catch {
-      setMsgs([...newMsgs, { role: "assistant", content: "Sorry, something went wrong. Try again." }]);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "No se pudo completar la solicitud.";
+      setMsgs([...newMsgs, { role: "assistant", content: "No se pudo completar: " + message }]);
     }
     setLoading(false);
   }
 
-  const agentColor = roleColors[agent.id]?.split(" ")[0]?.replace("from-","text-")?.replace("/20","") || "text-[var(--text-3)]";
 
   return (
     <div className="fixed inset-0 z-50 flex items-end md:items-center justify-center p-4 bg-black/70 backdrop-blur-sm" onClick={onClose}>
@@ -280,15 +349,49 @@ function AgentChat({ agent, onClose }: { agent: Agent; onClose: () => void }) {
           </div>
           <button onClick={onClose} className="ml-auto text-[var(--text-3)] hover:text-[var(--text)] transition-colors text-xl leading-none">×</button>
         </div>
+        {agent.id === "codex" ? (
+          <div className="max-h-[80vh] overflow-y-auto p-4 space-y-3" style={{ background: "var(--surface-1)" }}>
+            <CodexManualDispatch onCreated={onCreated} />
+            <button type="button" onClick={onAskMax} className="text-xs text-[var(--accent)] hover:underline">
+              Abrir el chat separado con MAX para evaluar posible delegación a Codex
+            </button>
+          </div>
+        ) : <>
+        {agent.id === "max" && (
+          <div className="px-4 pt-3 space-y-2" style={{ borderBottom: "1px solid var(--line)" }}>
+            <div className="flex flex-wrap items-center gap-2 text-[11px]">
+              <label htmlFor="max-provider">Proveedor de esta tarea</label>
+              <select id="max-provider" value={maxProvider} disabled={loading}
+                onChange={(event) => setMaxProvider(event.target.value === "excelnt" ? "excelnt" : "auto")}
+                className="rounded-md px-2 py-1 bg-[var(--surface-2)] text-[var(--text)]" style={{ border: "1px solid var(--line)" }}>
+                <option value="auto">Automático · Qwen/routing habitual</option>
+                <option value="excelnt">EXCELNT · solo texto</option>
+              </select>
+              {maxProvider === "excelnt" && <>
+                <label htmlFor="max-excelnt-model">Modelo</label>
+                <select id="max-excelnt-model" value={selectedExcelntModel} disabled={loading || excelntCatalogLoading || !excelntModels.length}
+                  onChange={(event) => setSelectedExcelntModel(event.target.value)}
+                  className="max-w-[220px] rounded-md px-2 py-1 bg-[var(--surface-2)] text-[var(--text)]" style={{ border: "1px solid var(--line)" }}>
+                  {excelntModels.map((model) => <option key={model} value={model}>{model}</option>)}
+                </select>
+              </>}
+            </div>
+            {maxProvider === "excelnt" && <p className="text-[10px] text-[var(--text-4)]">
+              {excelntCatalogLoading ? "Leyendo el catálogo autenticado de Hermes…" : excelntCatalogError || `${excelntModels.length} modelos autenticados. Tarea de texto sin herramientas ni delegaciones.`}
+            </p>}
+          </div>
+        )}
         {/* Messages */}
         <div className="h-80 overflow-y-auto p-4 space-y-3 flex flex-col" style={{ background: "var(--surface-1)" }}>
           {msgs.length === 0 && (
             <div className="flex-1 flex items-center justify-center">
               <p className="text-[var(--text-3)] text-[13px] text-center">
                 {agent.id === "max"
-                  ? "Ask Max to prioritize, coordinate, delegate, or execute work through Hermes."
+                  ? "Pídele a Max que priorice, coordine o delegue trabajo mediante Hermes."
                   : agent.id === "codex"
-                    ? "Describe an engineering change for Codex. It will wait for your approval before execution."
+                    ? "Describe la solicitud. Max comprobará si cumple la política y la derivará por el flujo autorizado de Codex solo cuando corresponda."
+                    : agent.id === "milo"
+                      ? "Pide a Milo un triage de correo en solo lectura. La solicitud esperará aprobación y no enviará ni modificará mensajes."
                     : agent.id === "aegis"
                       ? "Describe an authorized security task. It will wait for your approval before execution."
                   : agent.id === "pulse"
@@ -318,6 +421,12 @@ function AgentChat({ agent, onClose }: { agent: Agent; onClose: () => void }) {
           <div ref={endRef} />
         </div>
         {/* Input */}
+        {agent.id === "max" && (
+          <label className="flex items-center gap-2 px-4 pt-3 text-[11px] text-[var(--text-3)]">
+            <input type="checkbox" checked={maxProvider === "excelnt" || readOnlyMode} onChange={e => setReadOnlyMode(e.target.checked)} disabled={loading || maxProvider === "excelnt"} />
+            {maxProvider === "excelnt" ? "EXCELNT usa modo texto, sin herramientas" : "Solicitud estructurada de solo lectura (sin acciones)"}
+          </label>
+        )}
         <div className="flex gap-2 p-3" style={{ borderTop: "1px solid var(--line)" }}>
           <input
             value={input}
@@ -329,10 +438,11 @@ function AgentChat({ agent, onClose }: { agent: Agent; onClose: () => void }) {
           />
           <button
             onClick={send}
-            disabled={!input.trim() || loading}
+            disabled={!input.trim() || loading || (agent.id === "max" && maxProvider === "excelnt" && (!selectedExcelntModel || !excelntModels.includes(selectedExcelntModel) || excelntCatalogLoading || Boolean(excelntCatalogError)))}
             className="btn-primary px-4 py-2 text-[13px]"
           >Send</button>
         </div>
+        </>}
       </div>
     </div>
   );
@@ -345,6 +455,7 @@ export default function AgentsPage() {
   const [view, setView] = useState<"cards" | "office">("office");
   const [chatAgent, setChatAgent] = useState<Agent | null>(null);
   const [controlBusy, setControlBusy] = useState(false);
+  const [controlError, setControlError] = useState("");
 
   const connectMilo = useCallback(() => {
     void signIn("google", { callbackUrl: "/agents?milo=connected" }, {
@@ -364,41 +475,62 @@ export default function AgentsPage() {
   }, []);
 
   const controlAgent = useCallback(async (agent: Agent) => {
-    await fetch("/api/agents", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ agentId: agent.id, action: agent.status === "paused" ? "resume" : "pause" }),
-    });
-    loadAgents();
+    setControlError("");
+    try {
+      const result = await fetch("/api/agents", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ agentId: agent.id, action: agent.status === "paused" ? "resume" : "pause" }),
+      });
+      const data = await result.json().catch(() => ({}));
+      if (!result.ok) throw new Error(data.error || "No se pudo cambiar el estado del agente.");
+      await loadAgents();
+    } catch (error) {
+      setControlError(error instanceof Error ? error.message : "No se pudo cambiar el estado del agente.");
+    }
   }, [loadAgents]);
 
   const stopAgent = useCallback(async (agent: Agent) => {
-    if (!window.confirm(`¿Cancelar y limpiar las tareas pendientes y en curso de ${agent.name}?`)) return;
+    if (!window.confirm(`Esto detendrá a ${agent.name}, cancelará sus tareas pendientes y en curso y terminará los procesos registrados. Después volverá a IDLE y quedará disponible, salvo que ya estuviera en pausa. El historial se conserva para auditoría. ¿Continuar?`)) return;
+    setControlError("");
     setControlBusy(true);
     try {
       const result = await fetch("/api/agents/control", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ action: "stop_agent", agentId: agent.id }) });
-      if (!result.ok) window.alert("No se pudo detener el agente. Revisa el estado e inténtalo otra vez.");
+      const data = await result.json().catch(() => ({}));
+      if (!result.ok) throw new Error(data.error || "No se pudo detener el agente. Revisa el estado e inténtalo otra vez.");
+    } catch (error) {
+      setControlError(error instanceof Error ? error.message : "No se pudo detener el agente.");
     } finally { setControlBusy(false); await loadAgents(); }
   }, [loadAgents]);
 
   const emergencyReset = useCallback(async () => {
-    if (!window.confirm("Parada de emergencia: cancelar todas las tareas pendientes y en curso de todos los bots, incluidas las recibidas de Hermes. Los bots quedarán disponibles. ¿Continuar?")) return;
+    if (!window.confirm("Parada de emergencia: cancelar todas las tareas pendientes y en curso de los agentes, incluidas las recibidas de Hermes, y terminar los procesos registrados. Después los agentes volverán a IDLE y quedarán disponibles, conservando una pausa previa. El historial se conserva para auditoría. ¿Continuar?")) return;
+    setControlError("");
     setControlBusy(true);
     try {
       const result = await fetch("/api/agents/control", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ action: "emergency_reset" }) });
       const data = await result.json().catch(() => ({}));
-      if (!result.ok) window.alert(data.error || "No se pudo completar la parada de emergencia.");
-      else window.alert(`Parada completada: ${data.cancelled} tarea(s) cancelada(s).`);
+      if (!result.ok) throw new Error(data.error || "No se pudo completar la parada de emergencia.");
+      window.alert(`Parada completada: ${data.cancelled} tarea(s) cancelada(s). ${Array.isArray(data.pausedAgents) && data.pausedAgents.length ? `Siguen en pausa ${data.pausedAgents.length} agente(s) que ya estaban pausados.` : "Los agentes vuelven a estar disponibles."}`);
+    } catch (error) {
+      setControlError(error instanceof Error ? error.message : "No se pudo completar la parada de emergencia.");
     } finally { setControlBusy(false); await loadAgents(); }
   }, [loadAgents]);
 
   const setAgentIcon = useCallback(async (agent: Agent, emoji: string) => {
-    await fetch("/api/agents", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ agentId: agent.id, action: "set_icon", emoji }),
-    });
-    loadAgents();
+    setControlError("");
+    try {
+      const result = await fetch("/api/agents", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ agentId: agent.id, action: "set_icon", emoji }),
+      });
+      const data = await result.json().catch(() => ({}));
+      if (!result.ok) throw new Error(data.error || "No se pudo guardar el icono del agente.");
+      await loadAgents();
+    } catch (error) {
+      setControlError(error instanceof Error ? error.message : "No se pudo guardar el icono del agente.");
+    }
   }, [loadAgents]);
 
   useEffect(() => {
@@ -419,7 +551,7 @@ export default function AgentsPage() {
 
   const maxAgent = agents.find(a => a.id === "max");
   const teamAgents = agents.filter(a => a.id !== "max");
-  const online = agents.filter(a => !["offline", "paused"].includes(a.status)).length;
+  const idle = agents.filter(a => a.status === "idle").length;
   const working = agents.filter(a => a.status === "working").length;
   const totalTasks = agents.reduce((sum, a) => sum + a.tasksCompleted, 0);
 
@@ -433,7 +565,7 @@ export default function AgentsPage() {
           <h1 className="text-[32px] font-semibold tracking-[-0.025em] leading-none text-[var(--text)]">Your AI Team</h1>
           <p className="text-[13px] text-[var(--text-3)] mt-3">Working 24/7</p>
           <div className="flex flex-wrap gap-3 mt-4 text-[11px] text-[var(--text-3)]" aria-label="Agent status legend">
-            {(["working", "idle", "online", "offline", "error"] as const).map((key) => (
+            {(["working", "active", "idle", "online", "offline", "error", "paused", "unknown"] as const).map((key) => (
               <span key={key} className="inline-flex items-center gap-1.5">
                 <span className="w-2 h-2 rounded-full" style={{ background: statusConfig[key].dot }} />
                 {statusConfig[key].label}
@@ -451,8 +583,9 @@ export default function AgentsPage() {
           {/* Stats */}
           <div className="flex gap-7 text-center">
             <div>
-              <div className="num text-[22px] font-semibold leading-none" style={{ color: "var(--up)" }}>{online}<span className="text-[var(--text-4)]">/{agents.length}</span></div>
-              <div className="eyebrow mt-1.5">Online</div>
+              <div className="num text-[22px] font-semibold leading-none" style={{ color: statusConfig.idle.color }}>{idle}<span className="text-[var(--text-4)]">/{agents.length}</span></div>
+              <div className="eyebrow mt-1.5">Idle · sin tarea activa</div>
+              <div className="mt-1 text-[10px] text-[var(--text-4)]">La salud técnica se detalla en cada agente.</div>
             </div>
             <div>
               <div className="num text-[22px] font-semibold leading-none" style={{ color: "var(--accent)" }}>{working}</div>
@@ -490,8 +623,15 @@ export default function AgentsPage() {
         </div>
       </div>
 
+      {controlError && <div role="alert" aria-live="assertive" className="rounded-[var(--r-md)] border border-red-500/30 bg-red-500/10 p-3 text-[13px] text-red-200">{controlError}</div>}
+
       {/* Live Agent Chat Modal */}
-      {chatAgent && <AgentChat agent={chatAgent} onClose={() => setChatAgent(null)} />}
+      {chatAgent && <AgentChat
+        agent={chatAgent}
+        onClose={() => setChatAgent(null)}
+        onCreated={() => { void loadAgents(); }}
+        onAskMax={() => { setChatAgent(agents.find(a => a.id === "max") || null); }}
+      />}
 
       {/* Office View */}
       {view === "office" && (
@@ -534,7 +674,7 @@ export default function AgentsPage() {
           )}
 
           {/* Team grid */}
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+          <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
             {teamAgents.map(agent => (
               <AgentCard
                 key={agent.id}

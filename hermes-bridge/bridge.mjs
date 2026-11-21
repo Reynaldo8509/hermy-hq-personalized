@@ -17,6 +17,7 @@
  *               BRIDGE_MIRROR_MS (30000), HERMES_BIN (default "hermes").
  */
 import pg from "pg";
+import { dispatchKindBlockReason } from "../src/lib/dispatch-kind-policy.mjs";
 import { execFile } from "node:child_process";
 import { randomUUID } from "node:crypto";
 import fs from "node:fs";
@@ -97,7 +98,10 @@ const VIDEO2IMPLEMENTATION_PROJECT = "$HOME/hermes-customizations";
 const VIDEO2IMPLEMENTATION_ARTIFACT_ROOT = "$HOME/hermes-customizations/video2implementation";
 const VIDEO2IMPLEMENTATION_BRIDGE_TIMEOUT_MS = Number(process.env.VIDEO2IMPLEMENTATION_BRIDGE_TIMEOUT_MS || 660000);
 const VIDEO2IMPLEMENTATION_DELIVERY_TIMEOUT_MS = Number(process.env.VIDEO2IMPLEMENTATION_DELIVERY_TIMEOUT_MS || 30000);
-const ALERT_RECIPIENT = "telegram:5029489710";
+const TELEGRAM_OWNER_CHAT_ID = /^-?\d{1,20}$/.test(process.env.TELEGRAM_REYNALDO_CHAT_ID || "")
+  ? process.env.TELEGRAM_REYNALDO_CHAT_ID
+  : "";
+const ALERT_RECIPIENT = TELEGRAM_OWNER_CHAT_ID ? `telegram:${TELEGRAM_OWNER_CHAT_ID}` : "";
 const WIKI_DIR = process.env.HERMES_WIKI || path.join(os.homedir(), ".hermes", "wiki");
 const WIKI_LOCK = path.join(WIKI_DIR, ".bridge-write.lock");
 const CODEX_AUDIT_KIND = "codex.audit";
@@ -105,7 +109,7 @@ const CODEX_CHANGE_KIND = "codex.change";
 const INCIDENT_STOP_WORDS = new Set(["para", "como", "donde", "desde", "sobre", "entre", "esta", "este", "estos", "estas", "solo", "todo", "toda", "cada", "porque", "cual", "puede", "quiero", "necesito", "debe", "deben", "hacer", "usar", "que", "con", "sin", "por", "del", "las", "los", "una", "uno", "unos", "unas", "sus"]);
 const DEFAULT_TOKEN_LIMIT_HARBOR = Number(process.env.DEFAULT_TOKEN_LIMIT_HARBOR || 8000);
 const QWEN_MAX_SIMPLE = Number(process.env.QWEN_MAX_SIMPLE || 2000);
-const ATLAS_TELEGRAM_CHAT_ID = process.env.TELEGRAM_REYNALDO_CHAT_ID || "5029489710";
+const ATLAS_TELEGRAM_CHAT_ID = TELEGRAM_OWNER_CHAT_ID;
 const BRIEF_HOUR = Number(process.env.BRIEF_HOUR || 8);   // local hour to auto-generate the daily brief
 const BRIEF_TIMEZONE = process.env.BRIEF_TIMEZONE || "America/Guayaquil";
 const BRIEF_PROMPT =
@@ -380,6 +384,7 @@ async function deliverVideo2ImplementationDocuments(task, result) {
   const requested = [...new Set(task.requested_formats.filter(format => ["markdown", "docx", "pdf"].includes(format)))];
   const sent = [];
   const errors = [];
+  if (!ATLAS_TELEGRAM_CHAT_ID) return { ...result, DELIVERY_STATUS: "not_configured", delivery: { status: "not_configured", formats: [], errors: ["owner_chat_not_configured"] } };
   const target = `telegram:${ATLAS_TELEGRAM_CHAT_ID}`;
   for (const extension of ["markdown", "docx", "pdf"]) {
     if (!requested.includes(extension)) continue;
@@ -913,18 +918,19 @@ async function notifySpecialistOutcome(agent, request, status) {
     agent: agent.id,
     level,
     detail: detailText,
-    meta: { requestId: request.id, recipient: "reynaldo", channel: "telegram" }
+    meta: { requestId: request.id, recipient: "owner", channel: "telegram" }
   });
   const subject = "[Hermy HQ] " + agent.name + (level === "down" ? " · atención requerida" : " · informe");
   const body = title + "\n\n" + detailText + "\n\nSolicitud: " + request.title;
   try {
+    if (!ALERT_RECIPIENT) throw new Error("TELEGRAM_REYNALDO_CHAT_ID is not configured");
     await hermes(["send", "--to", ALERT_RECIPIENT, "--subject", subject, body], { timeout: 20000 });
   } catch (e) {
     await emit("alert", "No se pudo enviar aviso de " + agent.name + " por Telegram", {
       agent: agent.id,
       level: "down",
       detail: String(e.message || e).split("\n")[0].slice(0, 500),
-      meta: { requestId: request.id, recipient: "reynaldo", channel: "telegram" }
+      meta: { requestId: request.id, recipient: "owner", channel: "telegram" }
     });
     log("telegram alert failed:", agent.id, e.message);
   }
@@ -1185,8 +1191,12 @@ function atlasReportStamp(value = new Date()) {
 async function sendAtlasTelegramSummary(text, report, requestId) {
   const token = process.env.TELEGRAM_BOT_TOKEN || "";
   const baseUrl = process.env.NEXT_PUBLIC_BASE_URL || "";
-  if (!token) throw new Error("TELEGRAM_BOT_TOKEN is not configured");
-  const url = baseUrl ? baseUrl.replace(/\/$/, "") : "https://vps.tailf3d44a.ts.net";
+  if (!token || !ATLAS_TELEGRAM_CHAT_ID || !baseUrl) throw new Error("Atlas Telegram delivery is not configured");
+  const parsedBaseUrl = new URL(baseUrl);
+  if (parsedBaseUrl.protocol !== "https:" || parsedBaseUrl.username || parsedBaseUrl.password) {
+    throw new Error("Atlas public base URL must be an HTTPS origin");
+  }
+  const url = parsedBaseUrl.toString().replace(/\/$/, "");
   const replyMarkup = { inline_keyboard: [
     [{ text: "Ver en Hermy HQ", url: url + "/" }],
     [{ text: "Solicitar evidencia extra", url: url + "/?atlas=evidence&request=" + encodeURIComponent(requestId) }],
@@ -1368,6 +1378,14 @@ async function maybeDailyBrief() {
 
 /* ─────────────── PUSH: run website requests via Hermes ─────────────── */
 async function runRequest(r) {
+  const blockedKindReason = dispatchKindBlockReason(r.kind);
+  if (blockedKindReason) {
+    await q(`UPDATE "AgentRequest" SET status='failed', error=$2, "finishedAt"=now(), "updatedAt"=now() WHERE id=$1 AND status IN ('queued','approved')`, [r.id, blockedKindReason]);
+    await emit("status", "Solicitud no ejecutada: la ruta de notificación no está implementada", {
+      agent: "max", level: "warn", detail: blockedKindReason, meta: { requestId: r.id },
+    });
+    return;
+  }
   const gate = await q(`SELECT data FROM "DataStore" WHERE key='agent-emergency-gate'`);
   const gateData = gate.rows[0]?.data || {};
   if (gateData.active === true && Number(gateData.expiresAt || 0) > Date.now()) return;

@@ -1,5 +1,6 @@
 "use client";
 
+import { formatEcuadorTimestamp } from "@/lib/ecuador-time";
 import React, { useEffect, useState, useCallback, useRef } from "react";
 import dynamic from "next/dynamic";
 import { Panel, Button, Skeleton, EmptyState, Pill } from "@/components/ui/kit";
@@ -112,7 +113,7 @@ export default function YouTubePage() {
   }
 
   function fmtPubDate(s: string): string {
-    return new Date(s).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" });
+    return formatEcuadorTimestamp(s, { dateOnly: true });
   }
 
   const fetchIdeas = useCallback(async () => {

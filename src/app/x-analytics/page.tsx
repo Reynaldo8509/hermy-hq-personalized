@@ -1,5 +1,6 @@
 "use client";
 
+import { formatEcuadorTimestamp } from "@/lib/ecuador-time";
 import { useEffect, useState } from "react";
 import { SectionHeader, EmptyState } from "@/components/ui/kit";
 
@@ -37,7 +38,7 @@ function fmt(n: number): string {
 }
 
 function fmtDate(s: string): string {
-  return new Date(s).toLocaleDateString("en-US", { month: "short", day: "numeric" });
+  return formatEcuadorTimestamp(s, { dateOnly: true });
 }
 
 export default function XAnalyticsPage() {

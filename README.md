@@ -9,7 +9,7 @@
 
 
 
-Código activo de la aplicación Hermy HQ, el panel de coordinación y el puente Hermes del despliegue del VPS. El repo contiene fuentes, migraciones, manifiestos de dependencias y configuración de servicio de ejemplo. Excluye la base de datos en ejecución, entornos, registros, compilaciones, dependencias instaladas y respaldos internos.
+Repositorio público de **Hermy HQ personalizado**, panel de coordinación de ocho roles de agentes integrado con Hermes Agent mediante un Bridge. Contiene un **snapshot filtrado** de fuentes, migraciones, dependencias y ejemplos, no una reproducción íntegra del runtime o los datos del VPS. Excluye bases de datos, credenciales, registros, compilaciones, archivos privados y respaldos.
 
 Este proyecto se integra con [Hermes Agent Personalized](https://github.com/Reynaldo8509/hermes-agent-personalized) y [Home Assistant Personalized](https://github.com/Reynaldo8509/home-assistant-personalized).
 
@@ -30,6 +30,16 @@ La ilustración resume visualmente el ecosistema. El diagrama Mermaid y las secc
 ## Agentes configurados
 
 MAX coordina; ATLAS investiga; CODEX desarrolla; AEGIS realiza tareas de seguridad; MILO y PULSE cubren funciones auxiliares configuradas; LEDGER operaciones/continuidad; DOMUS hogar. El catálogo activo y las capacidades específicas están definidos en el código y pueden cambiar con la configuración.
+
+## Auditoría y alcance funcional (20 de noviembre de 2026)
+
+En la inspección se encontraron ocho agentes configurados: **MAX, ATLAS, CODEX, AEGIS, LEDGER, MILO, DOMUS y PULSE**. La presencia de cada agente en el catálogo **no equivale a ejecución E2E demostrada**. MAX coordina; los especialistas ejecutan funciones diferenciadas sujetas a políticas, routing, disponibilidad y autorizaciones.
+
+El Bridge y el proceso HQ se observaron activos. La suite offline ampliada del snapshot público pasó 285 pruebas; una prueba que requiere un unit file privado fue omitida. El health autenticado de la API HQ y la ejecución E2E individual de los agentes no se certificaron. `AUTOAPPROVAL_ENABLED=false` desactiva la aprobación delegada general; existe además una ruta separada de operador firmado Ed25519 con capacidades acotadas, cuyo ciclo E2E no se validó. La ruta MAX de notificación automática está bloqueada hasta disponer de un handler Bridge dedicado.
+
+- **[Inventario de los ocho agentes y estado de HQ](docs/AGENTS-STATUS-2026-11-20.md)**: roles, componentes, arquitectura y evidencias.
+- **[Inventario técnico de Hermes personalizado](https://github.com/Reynaldo8509/hermes-agent-personalized/blob/main/docs/CAPABILITIES-2026-11-20.md)**.
+- Los módulos públicos de HQ y Bridge están organizados en este repositorio; el documento de agentes identifica qué componentes se observaron y cuáles siguen sin validación E2E.
 
 ## Diagrama
 
