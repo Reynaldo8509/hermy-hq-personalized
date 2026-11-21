@@ -3,7 +3,9 @@
 import pg from "pg";
 import { execFile } from "node:child_process";
 import { promisify } from "node:util";
-import { createHash, randomUUID } from "node:crypto";
+import { randomUUID } from "node:crypto";
+import { category, fingerprint, filterSupervisorUnitFailures, legacyFingerprint } from "./incident-policy.mjs";
+import { isActionableSystemdFailure, parseSystemdUnitState } from "./systemd-state.mjs";
 
 const execFileP = promisify(execFile);
 const dbUrl = process.env.DATABASE_URL;
@@ -11,6 +13,7 @@ const dryRun = process.argv.includes("--dry-run");
 if (!dbUrl) throw new Error("DATABASE_URL is required");
 const pool = new pg.Pool({ connectionString: dbUrl, max: 1, ssl: /@(localhost|127\.0\.0\.1)/.test(dbUrl) ? undefined : { rejectUnauthorized: false } });
 const units = ["hermes-gateway-vps.service", "hermes-vps.service", "hermy-hq-vps.service", "hermy-hq-bridge-vps.service", "codex-hermy-vps.service"];
+let systemdReadings = {};
 const q = (text, values = []) => pool.query(text, values);
 
 function compact(value, limit = 700) { return String(value || "").replace(/\s+/g, " ").trim().slice(0, limit); }
@@ -22,16 +25,6 @@ function successfulSetupEvent(line) {
       event.params.payload?.provider_configured === true &&
       event.params.payload?.error === "";
   } catch { return false; }
-}
-function category(value) {
-  const text = String(value).toLowerCase();
-  if (/telegram|413|payload too large/.test(text)) return "telegram";
-  if (/qwen|llm|provider|model|429/.test(text)) return "llm";
-  if (/home assistant|alexa|adb|fire tv/.test(text)) return "home-automation";
-  if (/database|postgres|sqlite|state\.db/.test(text)) return "database";
-  if (/backup|rclone|onedrive|github/.test(text)) return "backup";
-  if (/ssh|tailscale|samba|network|timeout|connection/.test(text)) return "connectivity";
-  return "service";
 }
 function isKnownNonActionableJournal(line) {
   const text = String(line || "");
@@ -50,16 +43,6 @@ function isTelegramReconnectNoise(line) {
     || /Telegram network error(?:, scheduling reconnect|\s+\(attempt\s+\d+\/\d+\))/i.test(text)
     || /Connect attempt \d+\/\d+ failed:.*retrying in/i.test(text);
 }
-function fingerprint(incident) {
-  const stable = compact(incident.detail, 240).toLowerCase()
-    .replace(/[0-9a-f]{8}-[0-9a-f-]{27,}/g, "<id>")
-    .replace(/\d{4}-\d{2}-\d{2}[t ]\d{2}:\d{2}:\d{2}(?:\.\d+)?z?/gi, "<time>")
-    .replace(/pid[= :]\d+/gi, "pid=<n>")
-    .replace(/\[\d+\]/g, "[pid]")
-    .replace(/\s+/g, " ").trim();
-  return createHash("sha256").update(`${incident.source}|${category(incident.detail)}|${stable}`).digest("hex").slice(0, 24);
-}
-
 async function command(file, args) {
   try { return (await execFileP(file, args, { timeout: 20000, maxBuffer: 1024 * 1024 })).stdout; }
   catch (error) { return `${error.stdout || ""}\n${error.stderr || error.message || ""}`; }
@@ -71,14 +54,19 @@ async function privileged(file, args) {
 
 async function collect() {
   const incidents = [];
-  const failed = compact(await privileged("systemctl", ["--failed", "--no-legend", "--no-pager"]));
+  const failedOutput = await command("systemctl", ["--failed", "--no-legend", "--no-pager"]);
+  const failed = /permission denied|not authorized|access denied|failed to connect to bus/i.test(failedOutput)
+    ? ""
+    : compact(filterSupervisorUnitFailures(failedOutput));
   if (failed) incidents.push({ source: "systemd-failed", detail: failed });
   const unitStates = new Map();
   for (const unit of units) {
-    const state = compact(await privileged("systemctl", ["is-active", unit]));
+    const output = await command("systemctl", ["show", unit, "--property=LoadState,ActiveState,SubState", "--value"]);
+    const state = parseSystemdUnitState(output);
     unitStates.set(unit, state);
-    if (state !== "active") incidents.push({ source: unit, detail: `service state=${state}` });
+    if (isActionableSystemdFailure(state)) incidents.push({ source: unit, detail: `service state=${state}` });
   }
+  systemdReadings = Object.fromEntries(unitStates);
   const quiesceStamp = Date.parse(compact(await privileged("cat", ["/var/lib/hermes-backup/last-quiesce"])));
   const recentBackupQuiesce = Number.isFinite(quiesceStamp) && Date.now() >= quiesceStamp && Date.now() - quiesceStamp < 20 * 60 * 1000;
   const journal = await privileged("journalctl", ["--since", "-20 min", "--no-pager", "-o", "cat", "-u", "hermes-gateway-vps.service", "-u", "hermes-vps.service", "-u", "hermy-hq-bridge-vps.service", "-u", "codex-hermy-vps.service"]);
@@ -122,7 +110,7 @@ async function enqueue(incident) {
   const gate = (await q(`SELECT data FROM "DataStore" WHERE key='agent-emergency-gate'`)).rows[0]?.data;
   if (gate?.active === true && Number(gate.expiresAt || 0) > Date.now()) return "emergency-reset-active";
   const key = `error-supervisor:${incident.id}`;
-  const legacyId = createHash("sha256").update(`${incident.source}|${category(incident.detail)}`).digest("hex").slice(0, 24);
+  const legacyId = legacyFingerprint(incident);
   const legacyKey = `error-supervisor:${legacyId}`;
   const previous = (await q('SELECT data FROM "DataStore" WHERE key=$1 OR key=$2 ORDER BY "updatedAt" DESC LIMIT 1', [key, legacyKey])).rows[0]?.data;
   // Require the same normalized journal fingerprint in two supervisor cycles
@@ -143,12 +131,14 @@ async function enqueue(incident) {
   const legacyMigrationWindowMs = 2 * 60 * 60 * 1000;
   // Keep one Max task per active incident episode. The supervisor runs every 15m;
   // refreshing lastSeen prevents a persistent journal line from reopening work.
-  const lastSeen = previous?.lastSeenAt || previous?.at;
+  const lastSeen = previous?.recoveredAt ? null : previous?.lastSeenAt || previous?.at;
   const window = previous?.lastSeenAt ? episodeWindowMs : legacyMigrationWindowMs;
-  // Circuit breaker: one automatic Max request per incident episode.
+  // Circuit breaker: one automatic Max request until this fingerprint clears.
   const titleKey = `Max · incidente ${incident.category}: ${incident.source}`.slice(0, 200);
-  const active = (await q(`SELECT id, status FROM "AgentRequest" WHERE origin='error-supervisor' AND kind='max.chief-of-staff' AND title=$1 AND (status IN ('queued','approved','running','failed') OR (status='cancelled' AND "updatedAt" > now()-interval '24 hours')) ORDER BY "updatedAt" DESC LIMIT 1`, [titleKey])).rows[0];
-  if (active && (active.status !== 'failed' || (lastSeen && now - new Date(lastSeen).getTime() < 24 * 60 * 60 * 1000))) {
+  const activeRow = (await q(`SELECT id, status, "updatedAt" FROM "AgentRequest" WHERE origin='error-supervisor' AND kind='max.chief-of-staff' AND title=$1 AND (status IN ('queued','approved','running','failed') OR (status='cancelled' AND "updatedAt" > now()-interval '24 hours')) ORDER BY "updatedAt" DESC LIMIT 1`, [titleKey])).rows[0];
+  const recoveredAt = Date.parse(previous?.recoveredAt || "");
+  const active = activeRow && (!Number.isFinite(recoveredAt) || new Date(activeRow.updatedAt).getTime() > recoveredAt) ? activeRow : null;
+  if (active) {
     if (!dryRun) await q(`INSERT INTO "DataStore" (key, data, "updatedAt") VALUES ($1, $2::jsonb, now()) ON CONFLICT (key) DO UPDATE SET data=EXCLUDED.data, "updatedAt"=now()`, [key, JSON.stringify({ ...(previous || {}), lastSeenAt: new Date(now).toISOString(), requestId: active.id, circuit: 'open' })]);
     return 'circuit-open';
   }
@@ -158,23 +148,39 @@ async function enqueue(incident) {
   }
   const title = `Max · incidente ${incident.category}: ${incident.source}`.slice(0, 200);
   const prompt = (`AUTONOMOUS_REPAIR_REVIEW\nAUTONOMOUS_REPAIR_AUTHORIZED\nIDENTIDAD_COMPARTIDA: hermes-operator-constructor-v1\n` +
-    `El supervisor detectó un incidente importante con evidencia actual. Max debe elegir y delegar una reparación autónoma al dueño correcto. ` +
-    `Para servicio, código, filesystem, root o VPS delega a codex.engineering; para automatización del hogar a Domus; para backup/continuidad a Ledger; para seguridad defensiva a Aegis. ` +
-    `No esperes respuesta humana para diagnosticar, pero cualquier reparación side-effecting debe crear una solicitud aprobable y permanecer bloqueada hasta aprobación. Confirma evidencia, estructura la causa/hipótesis/reparación/validación y registra limitaciones y siguiente acción.\n` +
+    `El supervisor detectó un incidente importante con evidencia actual. Max debe elegir un solo especialista y limitarlo a una pasada de evidencia. ` +
+    `Para systemd, servicios, journal y operación VPS delega a Ledger; para backup/continuidad también a Ledger; para automatización del hogar a Domus; para seguridad defensiva a Aegis. Codex solo puede usarse si el usuario pidió explícitamente un cambio técnico concreto; una alerta automática no autoriza cambios de código. ` +
+    `Las reparaciones side-effecting deben crear una solicitud aprobable y permanecer bloqueadas hasta aprobación. Si no hay evidencia suficiente, existe conflicto de integración o falta autoridad, marca NO_RESOLUBLE con el bloqueo exacto y una acción siguiente; no repitas la misma revisión ni abras otra ronda. Reporta causa, hipótesis, reparación, validación, límites y siguiente acción.\n` +
     `Origen: ${incident.source}\nCategoría: ${incident.category}\nEvidencia: ${incident.detail}`).slice(0, 4000);
   if (dryRun) return "would-queue";
   const stillGated = (await q(`SELECT data FROM "DataStore" WHERE key='agent-emergency-gate'`)).rows[0]?.data;
   if (stillGated?.active === true && Number(stillGated.expiresAt || 0) > Date.now()) return "emergency-reset-active";
   const id = randomUUID();
-  await q(`INSERT INTO "AgentRequest" (id, kind, title, prompt, status, "sideEffecting", origin, "createdAt", "updatedAt") VALUES ($1,'max.chief-of-staff',$2,$3,'queued',false,'error-supervisor',now(),now())`, [id, title, prompt]);
+  await q(`INSERT INTO "AgentRequest" (id, kind, title, prompt, status, "sideEffecting", action, capability, origin, "createdAt", "updatedAt") VALUES ($1,'max.chief-of-staff',$2,$3,'queued',false,'coordinate','read_only','error-supervisor',now(),now())`, [id, title, prompt]);
   await q(`INSERT INTO "DataStore" (key, data, "updatedAt") VALUES ($1,$2::jsonb,now()) ON CONFLICT (key) DO UPDATE SET data=EXCLUDED.data,"updatedAt"=now()`, [key, JSON.stringify({ at: new Date().toISOString(), lastSeenAt: new Date().toISOString(), requestId: id, source: incident.source, category: incident.category })]);
   await q(`INSERT INTO "AgentEvent" (id, kind, title, detail, agent, level, meta, "createdAt") VALUES ($1,'alert',$2,$3,'max','warn',$4::jsonb,now())`, [randomUUID(), `Supervisor escaló ${incident.category} a Max`, incident.detail, JSON.stringify({ requestId: id, source: incident.source, category: incident.category, supervisor: true })]);
   return "queued";
 }
 
+async function markRecoveredEpisodes(incidents) {
+  if (dryRun) return;
+  const currentTitles = new Set(incidents.map((incident) => `Max · incidente ${incident.category}: ${incident.source}`.slice(0, 200)));
+  const { rows } = await q(`SELECT key, data FROM "DataStore" WHERE key LIKE 'error-supervisor:%' AND key NOT LIKE 'error-supervisor-observation:%'`);
+  const recoveredAt = new Date().toISOString();
+  for (const row of rows) {
+    const state = row.data || {};
+    if (!state.source || !state.category || state.recoveredAt) continue;
+    const title = `Max · incidente ${state.category}: ${state.source}`.slice(0, 200);
+    if (currentTitles.has(title)) continue;
+    await q(`INSERT INTO "DataStore" (key, data, "updatedAt") VALUES ($1, $2::jsonb, now()) ON CONFLICT (key) DO UPDATE SET data=EXCLUDED.data, "updatedAt"=now()`,
+      [row.key, JSON.stringify({ ...state, circuit: "recovered", recoveredAt })]);
+  }
+}
+
 try {
   const incidents = await collect();
+  await markRecoveredEpisodes(incidents);
   const outcomes = [];
   for (const incident of incidents) outcomes.push({ id: incident.id, source: incident.source, category: incident.category, outcome: await enqueue(incident) });
-  console.log(JSON.stringify({ dryRun, incidents: outcomes }));
+  console.log(JSON.stringify({ dryRun, systemdReadings, incidents: outcomes }));
 } finally { await pool.end(); }

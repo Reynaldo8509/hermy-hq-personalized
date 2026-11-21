@@ -1,15 +1,17 @@
 import { NextRequest, NextResponse } from "next/server";
 import { google } from "googleapis";
 import { prisma } from "@/lib/prisma";
+import { internalSecretMatches } from "@/lib/internal-secret-auth.mjs";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
+const MILO_EMAIL = String(process.env.MILO_ALLOWED_EMAIL || "").trim().toLowerCase();
 
 type Credentials = { email?: string; refreshToken?: string };
 
 function internal(request: NextRequest) {
   const secret = request.headers.get("x-internal-secret");
-  return Boolean(secret && secret === process.env.INTERNAL_API_SECRET);
+  return internalSecretMatches(secret, process.env.INTERNAL_API_SECRET);
 }
 
 // This route is only for the local Milo worker. It returns a short-lived Gmail
@@ -22,8 +24,8 @@ export async function GET(request: NextRequest) {
     prisma.dataStore.findUnique({ where: { key: "milo-gmail-state" } }),
   ]);
   const auth = (credentials?.data || {}) as Credentials;
-  if (!auth.refreshToken || auth.email !== "[REDACTED]") {
-    return NextResponse.json({ connected: false, email: "[REDACTED]" });
+  if (!MILO_EMAIL || !auth.refreshToken || auth.email?.toLowerCase() !== MILO_EMAIL) {
+    return NextResponse.json({ connected: false });
   }
 
   try {
@@ -37,12 +39,11 @@ export async function GET(request: NextRequest) {
     if (!access.token) throw new Error("Google did not return an access token");
     return NextResponse.json({
       connected: true,
-      email: auth.email,
       accessToken: access.token,
       state: state?.data || {},
     });
   } catch (error) {
     console.error("Milo Gmail token refresh failed", error);
-    return NextResponse.json({ connected: false, email: auth.email, error: "Gmail authorization needs reconnection" }, { status: 401 });
+    return NextResponse.json({ connected: false, error: "Gmail authorization needs reconnection" }, { status: 401 });
   }
 }

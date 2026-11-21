@@ -1,5 +1,7 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
+import { requireHumanActor, requestActor } from "@/lib/human-auth";
+import { createQueueRequest, readIdempotencyKey } from "@/lib/queue-request";
 
 export type CronJob = {
   id: string;
@@ -51,29 +53,48 @@ function parseCrons(raw: string): CronJob[] {
 }
 
 export async function GET() {
+  const auth = await requireHumanActor();
+  if (auth.response) return auth.response;
   const row = await prisma.dataStore.findUnique({ where: { key: "hermes-crons" } });
-  const data = (row?.data as { raw?: string; syncedAt?: string } | null) ?? {};
-  const jobs = data.raw ? parseCrons(data.raw) : [];
-  return NextResponse.json({ jobs, syncedAt: data.syncedAt ?? null });
+  const data = (row?.data as { raw?: string; jobs?: unknown; syncStatus?: string; syncedAt?: string; lastAttemptAt?: string } | null) ?? {};
+  const syncedAt = typeof data.syncedAt === "string" ? data.syncedAt : null;
+  if (data.syncStatus === "error") {
+    return NextResponse.json({ error: "cron_list_failed", syncStatus: "error", syncedAt }, { status: 503 });
+  }
+  if (!row || !syncedAt) {
+    return NextResponse.json({ error: "cron_sync_unavailable", syncStatus: "unknown", syncedAt: null }, { status: 503 });
+  }
+  const storedJobs = Array.isArray(data.jobs) && data.jobs.every((job) =>
+    job !== null && typeof job === "object" && typeof (job as { id?: unknown }).id === "string")
+    ? data.jobs as CronJob[] : null;
+  const jobs = storedJobs ?? parseCrons(typeof data.raw === "string" ? data.raw : "");
+  return NextResponse.json({ jobs, syncStatus: "ok", syncedAt, lastAttemptAt: data.lastAttemptAt ?? syncedAt });
 }
 
 // POST { op: "create"|"pause"|"resume"|"run"|"remove"|"edit", ... } → queue a cron mutation for the bridge
 export async function POST(req: Request) {
-  const b = await req.json().catch(() => ({}));
-  const op = (b.op || "").toString();
+  const auth = await requestActor(req, "max");
+  if (auth.response) return auth.response;
+  const b = await req.json().catch(() => ({})) as Record<string, unknown>;
+  const op = String(b.op || "");
   if (!["create", "pause", "resume", "run", "remove", "edit"].includes(op))
     return NextResponse.json({ error: "bad op" }, { status: 400 });
-  const label = op === "create" ? `Schedule: ${b.schedule || "?"} — ${b.prompt || b.name || ""}` : `Cron ${op}: ${b.name || b.id || ""}`;
-  const sideEffecting = op === "create" || op === "edit" || op === "remove";
-  const row = await prisma.agentRequest.create({
-    data: {
-      origin: "web",
-      kind: `cron.${op}`,
-      title: label.slice(0, 200),
-      prompt: JSON.stringify(b),
-      sideEffecting,
-      status: sideEffecting ? "awaiting_approval" : "queued",
-    },
-  });
-  return NextResponse.json({ request: row });
+  const label = op === "create"
+    ? "Schedule: " + String(b.schedule || "?") + " — " + String(b.prompt || b.name || "")
+    : "Cron " + op + ": " + String(b.name || b.id || "");
+  const prompt = JSON.stringify(b);
+  const key = readIdempotencyKey(req, b);
+  try {
+    const created = await createQueueRequest({
+      key, actor: auth.actor, origin: "web", kind: "cron." + op,
+      title: label.slice(0, 200), prompt, sideEffecting: true,
+      action: `timer.${op}`, capability: "systemd.timer.mutate",
+      status: "awaiting_approval", dependsOn: [],
+    });
+    return NextResponse.json({ request: created.request, duplicate: created.duplicate }, { status: created.duplicate ? 200 : 201 });
+  } catch (error) {
+    if (error instanceof Error && "status" in error) return NextResponse.json({ error: error.message }, { status: Number((error as Error & { status: number }).status) });
+    console.error("Cron operation could not be queued:", error);
+    return NextResponse.json({ error: "No se pudo encolar el cambio de cron" }, { status: 500 });
+  }
 }

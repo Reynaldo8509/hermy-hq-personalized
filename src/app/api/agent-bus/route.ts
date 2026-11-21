@@ -1,3 +1,4 @@
+import { requireHumanActor, requestActor } from "@/lib/human-auth";
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 
@@ -5,6 +6,8 @@ export const dynamic = "force-dynamic";
 
 // GET: Read messages for a specific agent (or all)
 export async function GET(req: Request) {
+  const auth = await requireHumanActor();
+  if (auth.response) return auth.response;
   const { searchParams } = new URL(req.url);
   const agent = searchParams.get("agent");
   const unreadOnly = searchParams.get("unread") === "true";
@@ -41,6 +44,8 @@ export async function GET(req: Request) {
 
 // POST: Send a message between agents
 export async function POST(req: Request) {
+  const auth = await requestActor(req);
+  if (auth.response) return auth.response;
   const body = await req.json();
 
   const msg = await prisma.agentBusMessage.create({
@@ -59,6 +64,8 @@ export async function POST(req: Request) {
 
 // PATCH: Mark messages as read
 export async function PATCH(req: Request) {
+  const auth = await requireHumanActor();
+  if (auth.response) return auth.response;
   const { messageIds } = await req.json();
 
   await prisma.agentBusMessage.updateMany({

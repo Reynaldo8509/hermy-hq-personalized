@@ -1,0 +1,3 @@
+# Synthetic report response
+
+This fictional response intentionally contains prose instead of the required JSON object. It includes no personal data and is used only to verify strict parsing.

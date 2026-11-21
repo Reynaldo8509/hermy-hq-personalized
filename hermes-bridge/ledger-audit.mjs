@@ -1,12 +1,18 @@
 import { execFile } from "node:child_process";
 import { promisify } from "node:util";
+import { homedir } from "node:os";
+import { join } from "node:path";
 
 const exec = promisify(execFile);
-export function isScheduledLedgerAudit(r) {
-  return r.kind === "ledger.operations" && r.origin === "system"
-    && r.sideEffecting === false
-    && r.title === "Ledger · auditoría de continuidad y salud operativa"
-    && String(r.prompt || "").startsWith("Auditoría periódica de solo lectura.");
+export function isScheduledLedgerAuditShape(r) {
+  return r?.kind === "ledger.operations" && r?.origin === "system"
+    && r?.sideEffecting === false
+    && r?.title === "Ledger · auditoría de continuidad y salud operativa"
+    && String(r?.prompt || "").startsWith("Auditoría periódica de solo lectura.");
+}
+
+export function isScheduledLedgerAudit(r, schedulerProvenance = null) {
+  return schedulerProvenance === "ledger" && isScheduledLedgerAuditShape(r);
 }
 
 // Fixed local probes: no model loop, shell interpolation, remote access or writes.
@@ -45,9 +51,13 @@ export async function runLedgerAudit(query, execute = exec) {
   checks.push(await probe("Timers y próxima ejecución", "systemctl", [
     "list-timers", "--all", "--no-pager", "*backup*", "*health*", "*observability*",
   ]));
-  for (const repo of ["$HOME/hermes/app", "$HOME/hermes-customizations"]) {
-    checks.push(await probe(`Git ${repo}`, "git", ["-C", repo, "status", "--porcelain=v1", "--branch", "--untracked-files=no"]));
-    checks.push(await probe(`Refs locales ${repo}`, "git", ["-C", repo, "for-each-ref", "--format=%(refname:short) %(objectname:short) %(committerdate:iso8601)", "refs/heads", "refs/remotes/origin/main"]));
+  const repositories = [
+    ["Hermes app", join(homedir(), "hermes/app")],
+    ["Hermes customizations", join(homedir(), "hermes-customizations")],
+  ];
+  for (const [label, repo] of repositories) {
+    checks.push(await probe(`Git ${label}`, "git", ["-C", repo, "status", "--porcelain=v1", "--branch", "--untracked-files=no"]));
+    checks.push(await probe(`Local refs ${label}`, "git", ["-C", repo, "for-each-ref", "--format=%(refname:short) %(objectname:short) %(committerdate:iso8601)", "refs/heads", "refs/remotes/origin/main"]));
   }
   try {
     const { rows } = await query({

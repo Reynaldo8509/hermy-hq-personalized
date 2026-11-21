@@ -1,6 +1,7 @@
 export const dynamic = "force-dynamic";
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
+import { requireHumanActor, requestActor } from "@/lib/human-auth";
 
 /** Convert a Prisma Draft row to the API shape the frontend expects. */
 function draftToApi(draft: any) {
@@ -40,6 +41,8 @@ function mergeMetrics(draftMetrics: any, tweetMetricCheckpoints: any): any {
 }
 
 export async function GET(req: NextRequest) {
+  const auth = await requireHumanActor();
+  if (auth.response) return auth.response;
   try {
   const { searchParams } = new URL(req.url);
   const statusFilter = searchParams.get("status");
@@ -124,6 +127,8 @@ export async function GET(req: NextRequest) {
 
 // POST: Create a new draft
 export async function POST(req: NextRequest) {
+  const auth = await requestActor(req, "internal:trend-snipe");
+  if (auth.response) return auth.response;
   const body = await req.json();
 
   const draft = await prisma.draft.create({
@@ -159,6 +164,8 @@ export async function POST(req: NextRequest) {
 }
 
 export async function PATCH(req: NextRequest) {
+  const auth = await requireHumanActor();
+  if (auth.response) return auth.response;
   const body = await req.json();
   const { draftId, text, title, undoRejection, metrics, tweetId, postedUrl, postedAt, status } = body;
 
@@ -214,6 +221,8 @@ export async function PATCH(req: NextRequest) {
 }
 
 export async function DELETE(req: NextRequest) {
+  const auth = await requireHumanActor();
+  if (auth.response) return auth.response;
   const { draftId } = await req.json();
 
   if (!draftId) {

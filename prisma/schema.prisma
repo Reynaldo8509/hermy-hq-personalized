@@ -81,9 +81,9 @@ model Draft {
   quoteText       String?
 
   // Content intelligence fields
-  source          String?   // "sage" | "organic" | "csv_import"
-  engagementScore Float?    // time-weighted composite score (updated by scoring engine)
-  engagementTier  String?   // "top20" | "bottom20" | null (cleared/set on rescore)
+  source          String? // "sage" | "organic" | "csv_import"
+  engagementScore Float? // time-weighted composite score (updated by scoring engine)
+  engagementTier  String? // "top20" | "bottom20" | null (cleared/set on rescore)
 
   @@index([status])
   @@index([createdAt])
@@ -125,48 +125,48 @@ model ContentCalendar {
 }
 
 model YoutubeIdea {
-  id                String   @id @default(cuid())
-  title             String
-  hook              String?
-  angle             String?
-  hookType          String?
-  funnelStage       String?
-  status            String   @default("pending")
-  rejectedReason    String?
-  sourceUrl         String?
-  sourceSummary     String?
-  competitionScore  String?  // "gap" | "moderate" | "crowded"
-  competitionData   Json?    // { resultCount, avgViews, topVideos[], scoredAt }
-  createdAt         DateTime @default(now())
+  id               String   @id @default(cuid())
+  title            String
+  hook             String?
+  angle            String?
+  hookType         String?
+  funnelStage      String?
+  status           String   @default("pending")
+  rejectedReason   String?
+  sourceUrl        String?
+  sourceSummary    String?
+  competitionScore String? // "gap" | "moderate" | "crowded"
+  competitionData  Json? // { resultCount, avgViews, topVideos[], scoredAt }
+  createdAt        DateTime @default(now())
 
   @@index([status])
 }
 
 model YoutubeScript {
-  id              String   @id @default(cuid())
-  title           String
-  hook            String?
-  storySetup      String?
-  conflict        String?
-  insight         String?
-  cta             String?
-  caption         String?
-  onScreenText    String?
-  hookType        String?
-  funnelStage     String?
-  factCheck       Json?
-  fullScript      String?
-  status          String   @default("draft")
-  rejectedReason  String?
+  id               String   @id @default(cuid())
+  title            String
+  hook             String?
+  storySetup       String?
+  conflict         String?
+  insight          String?
+  cta              String?
+  caption          String?
+  onScreenText     String?
+  hookType         String?
+  funnelStage      String?
+  factCheck        Json?
+  fullScript       String?
+  status           String   @default("draft")
+  rejectedReason   String?
   // SEO Package
-  seoTitle        String?
-  seoDescription  String?
-  seoTags         Json?
-  seoChapters     Json?
-  titleVariants   Json?
+  seoTitle         String?
+  seoDescription   String?
+  seoTags          Json?
+  seoChapters      Json?
+  titleVariants    Json?
   thumbnailConcept String?
-  createdAt       DateTime @default(now())
-  updatedAt       DateTime @updatedAt
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
 
   @@index([status])
 }
@@ -180,10 +180,10 @@ model YoutubeFeedback {
 }
 
 model LongformScript {
-  id               String   @id @default(cuid())
+  id               String    @id @default(cuid())
   title            String
   type             String?
-  status           String   @default("draft")
+  status           String    @default("draft")
   platform         String?
   platforms        Json?
   description      String?
@@ -206,10 +206,10 @@ model LongformScript {
   tweetRetweets    Int?
   tweetReplies     Int?
   postedAt         DateTime?
-  competitionScore String?  // "gap" | "moderate" | "crowded"
-  competitionData  Json?    // { resultCount, avgViews, topVideos[], scoredAt }
-  createdAt        DateTime @default(now())
-  updatedAt        DateTime @updatedAt
+  competitionScore String? // "gap" | "moderate" | "crowded"
+  competitionData  Json? // { resultCount, avgViews, topVideos[], scoredAt }
+  createdAt        DateTime  @default(now())
+  updatedAt        DateTime  @updatedAt
 
   @@index([status])
 }
@@ -278,14 +278,14 @@ model Brief {
 // ─── Missions ───────────────────────────────────────────────────
 
 model Mission {
-  id          String   @id @default(uuid())
+  id          String    @id @default(uuid())
   agentId     String
   title       String
-  description String   @db.Text
-  status      String   @default("pending") // pending, active, completed, failed
-  priority    String   @default("medium") // high, medium, low
-  result      String?  @db.Text
-  createdAt   DateTime @default(now())
+  description String    @db.Text
+  status      String    @default("pending") // pending, active, completed, failed
+  priority    String    @default("medium") // high, medium, low
+  result      String?   @db.Text
+  createdAt   DateTime  @default(now())
   completedAt DateTime?
 
   @@index([agentId])
@@ -298,14 +298,14 @@ model Article {
   id              String    @id @default(uuid())
   title           String
   body            String    @db.Text
-  track           String    // "mega-viral" | "local-viral" | "icp-viral"
+  track           String // "mega-viral" | "local-viral" | "icp-viral"
   status          String    @default("idea") // "idea" | "draft" | "ready" | "posted"
   qtTweet         String?   @db.Text
   qtUrl           String?
   heroImageUrl    String?
   heroImageHtml   String?   @db.Text
   inspirationUrls String?   @db.Text // JSON array of URLs
-  themes          String?   // JSON array of themes
+  themes          String? // JSON array of themes
   scheduledDate   String?
   postedAt        DateTime?
   postedUrl       String?
@@ -324,7 +324,7 @@ model SavedTitle {
   id        String   @id @default(cuid())
   title     String
   track     String
-  themes    String?  // JSON array
+  themes    String? // JSON array
   createdAt DateTime @default(now())
 
   @@index([track])
@@ -449,21 +449,34 @@ model ClientPulseAlert {
 // mirrors kanban tasks + activity back into HermesTask / AgentEvent.
 
 model AgentRequest {
-  id            String    @id @default(cuid())
-  origin        String    @default("web")     // "web" | "hermes"
-  kind          String    @default("oneshot") // "oneshot" | "kanban" | "chat"
-  title         String
-  prompt        String?
-  sideEffecting Boolean   @default(false)
-  status        String    @default("queued")  // queued | awaiting_approval | approved | running | done | failed | rejected
-  result        String?
-  error         String?
-  hermesTaskId  String?
-  decidedAt     DateTime?
-  startedAt     DateTime?
-  finishedAt    DateTime?
-  createdAt     DateTime  @default(now())
-  updatedAt     DateTime  @updatedAt
+  id             String    @id @default(cuid())
+  origin         String    @default("web") // "web" | "hermes"
+  kind           String    @default("oneshot") // "oneshot" | "kanban" | "chat"
+  title          String
+  prompt         String?
+  sideEffecting  Boolean   @default(false)
+  action         String?
+  capability     String?
+  contractVersion Int      @default(1)
+  executionMode  String?
+  scope          Json?
+  privacyClass   String?
+  requestedBy    String?
+  authSource     String?
+  riskReasons    Json?
+  status         String    @default("queued") // queued | awaiting_approval | approved | running | done | failed | rejected
+  result         String?
+  error          String?
+  hermesTaskId   String?
+  idempotencyKey String?   @unique
+  dependsOn      Json      @default("[]")
+  decidedAt      DateTime?
+  startedAt      DateTime?
+  finishedAt     DateTime?
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+  delegatedDecision DelegatedApprovalDecision?
+  delegatedAudits DelegatedApprovalAudit[]
 
   @@index([status])
   @@index([createdAt])
@@ -475,15 +488,179 @@ model AgentEvent {
   title     String
   detail    String?
   agent     String?
-  level     String   @default("info")     // info | up | warn | down
+  level     String   @default("info") // info | up | warn | down
   meta      Json?
   createdAt DateTime @default(now())
 
   @@index([createdAt])
 }
 
+model ActionApproval {
+  id                  String    @id
+  request_id          String
+  action              String
+  status              String    @default("pending")
+  requested_by        String
+  approved_by         String?
+  rejected_by         String?
+  resolved_by         String?
+  decision            String?
+  approvalMethod      String?   @map("approval_method")
+  result              String?
+  incident_id         String?
+  reason              String?
+  created_at          DateTime  @default(now()) @db.Timestamp(6)
+  resolved_at         DateTime? @db.Timestamp(6)
+  expires_at          DateTime? @db.Timestamp(6)
+  parameters_snapshot Json?
+  delegatedDecision   DelegatedApprovalDecision?
+
+  @@index([status, created_at(sort: Desc)], map: "ActionApproval_pending_idx")
+}
+
+model DelegatedApprovalPolicy {
+  id                 String   @id
+  version            Int
+  policy_hash        String   @unique
+  issuer             String
+  rule_ids           Json
+  resource_ids_by_rule Json
+  enabled            Boolean  @default(false)
+  issued_at          DateTime @db.Timestamptz(6)
+  expires_at         DateTime @db.Timestamptz(6)
+  revoked_at         DateTime? @db.Timestamptz(6)
+  revoked_by         String?
+  created_at         DateTime @default(now()) @db.Timestamptz(6)
+  decisions          DelegatedApprovalDecision[]
+  audits             DelegatedApprovalAudit[]
+
+  @@index([enabled, expires_at])
+}
+
+model DelegatedApprovalDecision {
+  id                  String   @id
+  request_id          String   @unique
+  approval_id         String   @unique
+  policy_id           String
+  policy_version      Int
+  policy_hash         String
+  rule_id             String
+  request_fingerprint String
+  delegated_actor     String
+  status              String   @default("issued")
+  issued_at           DateTime @default(now()) @db.Timestamptz(6)
+  expires_at          DateTime @db.Timestamptz(6)
+  consumed_at         DateTime? @db.Timestamptz(6)
+  request             AgentRequest @relation(fields: [request_id], references: [id], onDelete: Restrict)
+  approval            ActionApproval @relation(fields: [approval_id], references: [id], onDelete: Restrict)
+  policy              DelegatedApprovalPolicy @relation(fields: [policy_id], references: [id], onDelete: Restrict)
+
+  @@index([policy_id, status, expires_at])
+}
+
+model DelegatedApprovalAudit {
+  id                  String   @id
+  actor               String
+  event               String
+  policy_id           String?
+  request_id          String?
+  approval_id         String?
+  policy_hash         String?
+  request_fingerprint String?
+  detail              Json
+  created_at          DateTime @default(now()) @db.Timestamptz(6)
+  policy              DelegatedApprovalPolicy? @relation(fields: [policy_id], references: [id], onDelete: Restrict)
+  request             AgentRequest? @relation(fields: [request_id], references: [id], onDelete: Restrict)
+
+  @@index([policy_id, created_at])
+  @@index([request_id, created_at])
+}
+
+model IncidentMemory {
+  id          String    @id
+  fingerprint String
+  incident    String
+  evidence    String
+  cause       String
+  hypothesis  String
+  remediation String
+  validation  String
+  provider    String?
+  model       String?
+  duration_ms BigInt?
+  invalid_duration_ms BigInt?
+  cause_confirmed Boolean?
+  status      String    @default("open")
+  agent       String?
+  request_id  String?
+  created_at  DateTime  @default(now()) @db.Timestamp(6)
+  updated_at  DateTime  @default(now()) @db.Timestamp(6)
+  closed_at   DateTime? @db.Timestamp(6)
+  attempts    Json?
+  limitations String    @default("No limitaciones registradas.")
+  next_action String    @default("Sin siguiente acción registrada.")
+
+  @@index([fingerprint, updated_at(sort: Desc)], map: "IncidentMemory_fingerprint_idx")
+  @@index([request_id], map: "IncidentMemory_request_idx")
+  @@index([status, updated_at(sort: Desc)], map: "IncidentMemory_status_idx")
+  @@index([evidence(ops: raw("gin_trgm_ops"))], map: "incident_memory_evidence_trgm_idx", type: Gin)
+  @@index([incident(ops: raw("gin_trgm_ops"))], map: "incident_memory_incident_trgm_idx", type: Gin)
+}
+
+model InferenceAttempt {
+  id          String    @id
+  request_id  String
+  attempt_no          Int
+  attempt_number      Int?
+  provider            String
+  model               String
+  requested_provider  String?
+  requested_model     String?
+  gateway             String?
+  actual_provider     String?
+  actual_model        String?
+  underlying_provider String?
+  status              String
+  reason              String?
+  error_class         String?
+  failover_reason     String?
+  cost_source         String?
+  duration_ms         BigInt?
+  started_at          DateTime? @db.Timestamp(6)
+  prompt_tokens       BigInt?
+  uncached_prompt_tokens BigInt?
+  completion_tokens   BigInt?
+  total_tokens        BigInt?
+  reported_cost       Float?
+  cost_currency       String?
+  cost_status         String   @default("unknown")
+  free_route          Boolean?
+  route_cost_policy   String?
+  reasoning_tokens    BigInt?
+  cache_read_tokens   BigInt?
+  cache_write_tokens  BigInt?
+  api_calls           Int?
+  remote_attempted    Boolean?
+  remote_attempt_status String?
+  usage_source        String?
+  http_status         Int?
+  auxiliary_total_tokens BigInt?
+  total_including_auxiliary_tokens BigInt?
+  usage_scope         String?
+  privacy_class       String?
+  complexity_class    String?
+  route_tier          String?
+  fallback_count      Int       @default(0)
+  finish_reason       String?
+  structured_output_valid Boolean?
+  created_at          DateTime  @default(now()) @db.Timestamp(6)
+  finished_at         DateTime? @db.Timestamp(6)
+
+  @@index([request_id, attempt_no], map: "InferenceAttempt_request_idx")
+}
+
 model HermesTask {
-  id        String   @id                   // Hermes task id
+  id        String   @id // Hermes task id
   board     String   @default("default")
   title     String
   assignee  String?
@@ -499,8 +676,8 @@ model HermesTask {
 
 // ─── Hermes Memory Wiki (warm tier — git-tracked markdown, mirrored) ─────
 model HermesMemory {
-  id         String    @id            // wiki entry slug (relative path w/o .md)
-  path       String                   // file path relative to wiki root
+  id         String    @id // wiki entry slug (relative path w/o .md)
+  path       String // file path relative to wiki root
   type       String    @default("fact")
   title      String
   status     String    @default("active")

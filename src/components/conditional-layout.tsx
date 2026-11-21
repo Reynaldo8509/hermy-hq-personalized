@@ -18,7 +18,13 @@ export function ConditionalLayout({ children }: { children: React.ReactNode }) {
           main, so it's truly viewport-fixed and never scrolls away. */}
       <div className="hq-ambient" aria-hidden />
       <Sidebar />
-      <main className="relative flex-1 overflow-auto pt-16 md:pt-0 pb-20 md:pb-0 px-4 sm:px-6 md:px-10 lg:px-12 py-4 md:py-8 page-enter">
+      <a
+        href="#main-content"
+        className="sr-only focus:not-sr-only focus:fixed focus:left-3 focus:top-3 focus:z-[120] focus:rounded-lg focus:bg-[var(--surface-2)] focus:px-4 focus:py-3 focus:text-sm"
+      >
+        Saltar al contenido
+      </a>
+      <main id="main-content" tabIndex={-1} aria-label="Contenido principal" className="relative flex-1 overflow-auto pt-16 md:pt-0 pb-20 md:pb-0 px-4 sm:px-6 md:px-10 lg:px-12 py-4 md:py-8 page-enter">
         <div className="pb-safe">
           {children}
         </div>
