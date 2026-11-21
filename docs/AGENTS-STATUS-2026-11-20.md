@@ -64,7 +64,7 @@ La presencia de un módulo no garantiza que esté activado. `AUTOAPPROVAL_ENABLE
 
 ## Resultados y limitaciones de validación
 
-- **285 pruebas offline aprobadas y una omitida** en la suite ampliada del snapshot público. La prueba omitida necesita el unit file privado de despliegue; lint terminó sin errores (70 avisos), type-check y build fueron revisados en la auditoría final.
+- **293 pruebas aprobadas, 0 fallidas y 1 omitida** en la validación final registrada para el snapshot público. La prueba omitida necesita el unit file privado de despliegue; lint terminó sin errores (70 avisos), type-check y build fueron revisados en la auditoría final.
 - Proceso HQ y Bridge observados activos, pero **no se confirmó de forma independiente el health autenticado de la API HQ**.
 - No se probó la ejecución E2E de cada agente, envío externo, ciclo de aprobación completo ni continuidad tras reinicios.
 - La funcionalidad del modelo local y de los proveedores configurados no quedó demostrada por inferencia durante esta auditoría.
@@ -73,7 +73,7 @@ La presencia de un módulo no garantiza que esté activado. `AUTOAPPROVAL_ENABLE
 
 ## Estado de publicación
 
-El PR de sincronización del 20 de noviembre de 2026 incorpora **242 archivos nuevos/modificados** seleccionados de HQ y Bridge. Excluye identidad, datos de runtime, credenciales, unidades de despliegue, archivos privados y material que requiere sanitización adicional. No implica paridad completa con la producción del VPS.
+El **PR #2** de sincronización del 20 de noviembre de 2026 se fusionó en `main` el 21 de noviembre de 2026 mediante squash; el commit de merge es `6d6f3d22874175c0b73b5e78e494a59d4490932a`. Incorporó **242 archivos nuevos/modificados** seleccionados de HQ y Bridge. Excluye identidad, datos de runtime, credenciales, unidades de despliegue, archivos privados y material que requiere sanitización adicional. No implica paridad completa con la producción del VPS.
 
 **Licencias y atribuciones:** distinguir los componentes originales, dependencias de terceros y personalizaciones de REY. No usar esta documentación como promesa de disponibilidad ni de controles de seguridad certificados.
 
