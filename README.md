@@ -9,7 +9,7 @@
 
 
 
-Código activo de la aplicación Hermy HQ, el panel de coordinación y el puente Hermes del despliegue del VPS. El repo contiene fuentes, migraciones, manifiestos de dependencias y configuración de servicio de ejemplo. Excluye la base de datos en ejecución, entornos, registros, compilaciones, dependencias instaladas y respaldos internos.
+Repositorio público de **Hermy HQ personalizado**, panel de coordinación de ocho roles de agentes integrado con Hermes Agent mediante un Bridge. Contiene un **snapshot filtrado** de fuentes, migraciones, dependencias y ejemplos, no una reproducción íntegra del runtime o los datos del VPS. Excluye bases de datos, credenciales, registros, compilaciones, archivos privados y respaldos.
 
 Este proyecto se integra con [Hermes Agent Personalized](https://github.com/Reynaldo8509/hermes-agent-personalized) y [Home Assistant Personalized](https://github.com/Reynaldo8509/home-assistant-personalized).
 
@@ -30,6 +30,16 @@ La ilustración resume visualmente el ecosistema. El diagrama Mermaid y las secc
 ## Agentes configurados
 
 MAX coordina; ATLAS investiga; CODEX desarrolla; AEGIS realiza tareas de seguridad; MILO y PULSE cubren funciones auxiliares configuradas; LEDGER operaciones/continuidad; DOMUS hogar. El catálogo activo y las capacidades específicas están definidos en el código y pueden cambiar con la configuración.
+
+## Auditoría y alcance funcional (20 de noviembre de 2026)
+
+En la inspección se encontraron ocho agentes configurados: **MAX, ATLAS, CODEX, AEGIS, LEDGER, MILO, DOMUS y PULSE**. La presencia de cada agente en el catálogo **no equivale a ejecución E2E demostrada**. MAX coordina; los especialistas ejecutan funciones diferenciadas sujetas a políticas, routing, disponibilidad y autorizaciones.
+
+El Bridge y el proceso HQ se observaron activos y **69/69 pruebas offline seleccionadas** superaron sus comprobaciones. Sin embargo, el health autenticado de la API HQ no pudo confirmarse independientemente; el ciclo completo de aprobación y la ejecución individual de todos los agentes tampoco fueron probados. La autoaprobación estaba deshabilitada en la configuración inspeccionada.
+
+- **[Inventario de los ocho agentes y estado de HQ](docs/AGENTS-STATUS-2026-11-20.md)**: roles, componentes, arquitectura y evidencias.
+- **[Inventario técnico de Hermes personalizado](https://github.com/Reynaldo8509/hermes-agent-personalized/blob/sync/hermes-vps-20261120/docs/CAPABILITIES-2026-11-20.md)**.
+- **[Actualización de código HQ/Bridge (PR #1)](https://github.com/Reynaldo8509/hermy-hq-personalized/pull/1)**: 242 archivos nuevos o modificados seleccionados, pendientes de revisión y sin fusionar a `main`.
 
 ## Diagrama
 
