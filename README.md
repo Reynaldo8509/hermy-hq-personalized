@@ -51,6 +51,7 @@ En la inspección se encontraron ocho agentes configurados: **MAX, ATLAS, CODEX,
 El Bridge y el proceso HQ se observaron activos. La validación final registrada para el snapshot público tuvo **293 pruebas aprobadas, 0 fallidas y 1 omitida**; la omitida requiere un unit file privado. El health autenticado de la API HQ y la ejecución E2E individual de los agentes no se certificaron. `AUTOAPPROVAL_ENABLED=false` desactiva la aprobación delegada general; existe además una ruta separada de operador firmado Ed25519 con capacidades acotadas, cuyo ciclo E2E no se validó. La ruta MAX de notificación automática está bloqueada hasta disponer de un handler Bridge dedicado.
 
 - **[Inventario de los ocho agentes y estado de HQ](docs/AGENTS-STATUS-2026-11-20.md)**: roles, componentes, arquitectura y evidencias.
+- **[Contrato de solicitudes de reinicio MCP](docs/MCP-RESTART-APPROVAL.md)**: alcance del código, controles y estado de validación; su publicación no implica que esté desplegado.
 - **[Inventario técnico de Hermes personalizado](https://github.com/Reynaldo8509/hermes-agent-personalized/blob/main/docs/CAPABILITIES-2026-11-20.md)**.
 - Los módulos públicos de HQ y Bridge están organizados en este repositorio; el documento de agentes identifica qué componentes se observaron y cuáles siguen sin validación E2E.
 
