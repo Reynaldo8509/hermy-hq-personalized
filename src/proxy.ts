@@ -4,6 +4,7 @@ import { getToken } from 'next-auth/jwt';
 import { isTrustedOperatorPath } from '@/lib/trusted-operator.mjs';
 import { authorizeJobApplyEventsToken } from '@/lib/job-apply-events-auth.mjs';
 import { internalSecretMatches } from '@/lib/internal-secret-auth.mjs';
+import { authorizeMcpRestartRequest, isMcpRestartCredentialPath } from '@/lib/mcp-restart-service-auth.mjs';
 
 const INTERNAL_API_ROUTES: Array<{ method: string; path: string; nested?: boolean }> = [
   { method: "POST", path: "/api/agents" },
@@ -78,6 +79,20 @@ export async function proxy(request: NextRequest) {
     }
     if (request.method !== 'POST') {
       return NextResponse.json({ error: 'method_not_allowed' }, { status: 405 });
+    }
+    return NextResponse.next();
+  }
+
+  // This dedicated identity is limited to MCP restart request creation and status.
+  // Supplying its header never falls through to a broader service or browser identity.
+  if (request.headers.has('x-mcp-restart-token') || isMcpRestartCredentialPath(pathname)) {
+    const authorization = authorizeMcpRestartRequest(
+      request.method,
+      request.url,
+      request.headers.get('x-mcp-restart-token'),
+    );
+    if (authorization.status !== 200) {
+      return NextResponse.json({ error: authorization.error }, { status: authorization.status });
     }
     return NextResponse.next();
   }

@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { requireHumanActor } from "@/lib/human-auth";
 import { decideApprovalById } from "@/lib/approval-control";
+import { humanFacingMcpApproval } from "@/lib/mcp-restart-approval.mjs";
 
 export const dynamic = "force-dynamic";
 
@@ -14,7 +15,8 @@ export async function GET() {
   const history = await prisma.$queryRawUnsafe<Array<Record<string, unknown>>>(
     "SELECT a.id, a.request_id, a.action, a.status, a.requested_by, a.approved_by, a.rejected_by, a.resolved_by, a.decision, a.approval_method, a.reason, a.result, a.incident_id, a.created_at, a.resolved_at, a.expires_at, r.title, r.status AS request_status FROM \"ActionApproval\" a LEFT JOIN \"AgentRequest\" r ON r.id=a.request_id WHERE a.status IN ('approved','rejected','expired','cancelled') ORDER BY a.resolved_at DESC NULLS LAST LIMIT 100"
   );
-  return NextResponse.json({ approvals, history });
+  const safeApprovals = approvals.map(humanFacingMcpApproval);
+  return NextResponse.json({ approvals: safeApprovals, history });
 }
 
 export async function PATCH(req: Request) {

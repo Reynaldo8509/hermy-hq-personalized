@@ -75,6 +75,12 @@ La presencia de un módulo no garantiza que esté activado. `AUTOAPPROVAL_ENABLE
 
 El **PR #2** de sincronización del 20 de noviembre de 2026 se fusionó en `main` el 21 de noviembre de 2026 mediante squash; el commit de merge es `6d6f3d22874175c0b73b5e78e494a59d4490932a`. Incorporó **242 archivos nuevos/modificados** seleccionados de HQ y Bridge. Excluye identidad, datos de runtime, credenciales, unidades de despliegue, archivos privados y material que requiere sanitización adicional. No implica paridad completa con la producción del VPS.
 
+### Nota de sincronización — 23 de noviembre de 2026
+
+El Bridge productivo observado continúa en el release **R14** del 16 de noviembre. `main` contiene un snapshot de código público posterior y seleccionado; no es una exportación exacta del release activo ni una orden de actualización. En la comparación anterior, 76 archivos coincidían, 8 diferían y 3 solo existían en el árbol activo; los archivos públicos adicionales reflejan trabajo de código posterior. Esta sincronización no reemplaza R14 ni valida su despliegue.
+
+El código de solicitudes de reinicio MCP está descrito en [su contrato técnico](MCP-RESTART-APPROVAL.md). El registro de una solicitud solo la deja pendiente para revisión humana; no reinicia servicios ni concede aprobación automática.
+
 **Licencias y atribuciones:** distinguir los componentes originales, dependencias de terceros y personalizaciones de REY. No usar esta documentación como promesa de disponibilidad ni de controles de seguridad certificados.
 
 ## Repositorios relacionados

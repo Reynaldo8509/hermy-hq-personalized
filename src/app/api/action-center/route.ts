@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { agentForKind, dependenciesAreDone, groupIncidentRows } from "@/lib/phase2-domain.mjs";
 import { requireHumanActor } from "@/lib/human-auth";
+import { humanFacingMcpApproval } from "@/lib/mcp-restart-approval.mjs";
 
 export const dynamic = "force-dynamic";
 
@@ -39,6 +40,7 @@ export async function GET() {
       ),
     ]);
 
+    const safeApprovals = approvals.map(humanFacingMcpApproval);
     const safeRows = incidentRows.map(jsonSafe);
     const incidents = groupIncidentRows(safeRows);
     const dependencyIds = [...new Set(requests.flatMap((row) => Array.isArray(row.dependsOn) ? row.dependsOn.map(String) : []))];
@@ -83,7 +85,7 @@ export async function GET() {
       incidents: jsonSafe(incidents),
       tasks: jsonSafe(tasks),
       activeTasks: jsonSafe(activeTasks),
-      approvals: jsonSafe(approvals),
+      approvals: jsonSafe(safeApprovals),
       alerts: jsonSafe(alerts),
       repairResults: jsonSafe(repairResults),
       failureSummary,
